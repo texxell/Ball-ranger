@@ -2,8 +2,7 @@
  * BallRanger.io - PhysicsEngine.js & WeaponSystem.js
  * 职责：处理 3D 刚体弹性碰撞、50% 质量碎片爆裂物理、武器状态检查与钱包硬扣除
  */
-
-export class PhysicsEngine {
+class PhysicsEngine {
     constructor(sceneInstance) {
         this.mainScene = sceneInstance;
         this.crystals = []; // 存储场上掉落的 3D 晶体碎片网格
