@@ -1,13 +1,18 @@
 /**
- * 步骤二：暴力触控排查版 GameUI.js
- * 目标：强行把 UI 塞到最前面，戳破触控屏蔽。
+ * 步骤三：iPad 电容屏专用暴力触控版 GameUI.js
+ * 目标：强行阻断 iPad 网页滚动拦截，百分之百捕获手指触控
  */
 class GameUI {
     constructor(onJoystickMove, onWeaponTrigger) {
-        console.log("GameUI: 触控层排查初始化...");
+        console.log("GameUI: iPad Touch Engine active.");
         this.onJoystickMove = onJoystickMove;
         this.onWeaponTrigger = onWeaponTrigger;
         
+        // 强行阻止整个 iPad 网页的默认双击放大和滑动橡皮鞭效应
+        document.addEventListener('touchmove', (e) => {
+            if(e.touches.length > 1) e.preventDefault();
+        }, { passive: false });
+
         this.initElements();
         this.bindEvents();
     }
@@ -16,71 +21,84 @@ class GameUI {
         this.joystick = document.getElementById('joystick');
         this.dashBtn = document.getElementById('dash-btn');
 
-        // 【暴力置顶机制】直接用 JS 给按钮加最高层级，防止被 3D 画面挡住
-        if (this.joystick) {
-            this.joystick.style.position = "absolute";
-            this.joystick.style.zIndex = "9999";
-            this.joystick.style.pointerEvents = "auto";
-        }
-        if (this.dashBtn) {
-            this.dashBtn.style.position = "absolute";
-            this.dashBtn.style.zIndex = "9999";
-            this.dashBtn.style.pointerEvents = "auto";
-        }
+        // 【iPad 强行置顶与穿透】
+        const forceStyle = (el) => {
+            if (!el) return;
+            el.style.position = "fixed"; 
+            el.style.zIndex = "99999";    // 提到外太空层级
+            el.style.webkitUserSelect = "none"; // 禁止 iPad 长按弹出复制
+            el.style.userSelect = "none";
+        };
+
+        forceStyle(this.joystick);
+        forceStyle(this.dashBtn);
     }
 
     bindEvents() {
-        // 1. 测试 Dash 暴力拦截
+        // 1. iPad 专属 Pointer 事件响应 Dash（比 touch 更灵敏，无延迟）
         if (this.dashBtn) {
-            const triggerDash = (e) => {
-                e.stopPropagation(); // 阻止事件传给 3D 画布
-                console.log("👉 硬件层：Dash 按钮真的被点到了！");
+            const doDash = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log("iPad 硬件捕获：Dash 按下了！");
                 if (typeof this.onWeaponTrigger === 'function') {
                     this.onWeaponTrigger('dash');
                 }
             };
-            this.dashBtn.addEventListener('click', triggerDash);
-            this.dashBtn.addEventListener('touchstart', triggerDash, { passive: true });
+            this.dashBtn.addEventListener('pointerdown', doDash);
+            this.dashBtn.addEventListener('touchstart', doDash, { passive: false });
         }
 
-        // 2. 测试摇杆键盘替代（为了排查你设备上手指拖不动的问题，特意加上键盘方向键测试！）
-        window.addEventListener('keydown', (e) => {
-            let fx = 0, fy = 0;
-            if (e.key === 'ArrowUp' || e.key === 'w') fy = -1;
-            if (e.key === 'ArrowDown' || e.key === 's') fy = 1;
-            if (e.key === 'ArrowLeft' || e.key === 'a') fx = -1;
-            if (e.key === 'ArrowRight' || e.key === 'd') fx = 1;
+        // 2. iPad 全屏任意位置“双击”或“双指按住拖动”作为备用移动方案
+        let touchStartX = 0;
+        let touchStartY = 0;
 
-            if (fx !== 0 || fy !== 0) {
-                console.log(`⌨️ 键盘映射输入: fx=${fx}, fy=${fy}`);
+        window.addEventListener('touchstart', (e) => {
+            // 如果点在右下角 Dash 附近不触发移动
+            if (e.touches[0].clientX > window.innerWidth * 0.7 && e.touches[0].clientY > window.innerHeight * 0.7) return;
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+            if (touchStartX === 0 || touchStartY === 0) return;
+            
+            // 计算手指在 iPad 屏幕上滑动的相对距离
+            const dx = e.touches[0].clientX - touchStartX;
+            const dy = e.touches[0].clientY - touchStartY;
+            
+            // 归一化方向
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 5) {
+                const fx = (dx / len) * 2;
+                const fy = (dy / len) * 2;
                 if (typeof this.onJoystickMove === 'function') {
-                    this.onJoystickMove(fx * 2, fy * 2);
+                    this.onJoystickMove(fx, fy);
                 }
             }
-        });
+        }, { passive: false });
 
-        // 3. 原生鼠标直接拖拽屏幕测试（如果按钮按不到，直接在屏幕上点住拖动也能让球动）
-        let isDrawing = false;
-        window.addEventListener('mousedown', () => { isDrawing = true; });
-        window.addEventListener('mousemove', (e) => {
-            if (!isDrawing) return;
-            // 根据鼠标在屏幕上的移动位置计算方向
-            const fx = (e.clientX / window.innerWidth) - 0.5;
-            const fy = (e.clientY / window.innerHeight) - 0.5;
-            if (typeof this.onJoystickMove === 'function') {
-                this.onJoystickMove(fx * 0.1, fy * 0.1);
-            }
+        window.addEventListener('touchend', () => {
+            touchStartX = 0;
+            touchStartY = 0;
         });
-        window.addEventListener('mouseup', () => { isDrawing = false; });
     }
 
     showCenterAlert(msg) {
-        console.log(`[UI Alert]: ${msg}`);
         const alertOverlay = document.getElementById('center-alert');
         if (alertOverlay) {
             alertOverlay.innerText = msg;
             alertOverlay.style.opacity = "1";
-            alertOverlay.style.zIndex = "9999";
+            alertOverlay.style.position = "fixed";
+            alertOverlay.style.zIndex = "99999";
+            alertOverlay.style.top = "20%";
+            alertOverlay.style.left = "50%";
+            alertOverlay.style.transform = "translate(-50%, -50%)";
+            alertOverlay.style.color = "#ff3344";
+            alertOverlay.style.fontSize = "24px";
+            alertOverlay.style.background = "rgba(0,0,0,0.8)";
+            alertOverlay.style.padding = "10px 20px";
+            alertOverlay.style.borderRadius = "10px";
             setTimeout(() => { alertOverlay.style.opacity = "0"; }, 1500);
         }
     }
