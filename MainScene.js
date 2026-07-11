@@ -30,9 +30,11 @@
             (weapon) => this.handleWeaponTrigger(weapon)
         );
 
-        // 启动高频渲染循环
-        this.animate();
-        window.addEventListener('resize', () => this.onWindowResize());
+        // 【核心修改】启动高频渲染循环，死锁 this 实例防止渲染循环断流
+        this.animate.bind(this)();
+        
+        // 【核心修改】显式使用 .bind(this) 强行绑定当前类实例，彻底绝育移动端 window 的作用域污染
+        window.addEventListener('resize', this.onWindowResize.bind(this));
     }
 
     // ==========================================
@@ -42,7 +44,10 @@
         // ✅ 改回深灰色星舰虚空背景
         this.scene.background = new THREE.Color(0x0F0F12); 
         this.scene.fog = new THREE.FogExp2(0x0F0F12, 0.015);
-        // ... 其他保持不变 ...
+        
+        // 【核心补全】补全你给的代码里漏掉的相机初始化声明
+        this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
         // 【核心修改】给相机一个初始的高空后方坐标，防止它在 (0,0,0) 埋在球体内部导致画面全黑
         this.camera.position.set(0, 30, 40); 
         this.camera.lookAt(0, 0, 0);
@@ -52,17 +57,19 @@
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制双倍像素比，防止高分屏 iPad 烧显卡
         this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
         this.renderer.toneMappingExposure = 1.0;
+        
+        // 【核心强灌】直接用内联样式强行锁死 Canvas 的物理高宽，绝不给 Safari 留下一丝坍塌成 0px 的机会
+        this.renderer.domElement.style.position = "absolute";
+        this.renderer.domElement.style.top = "0";
+        this.renderer.domElement.style.left = "0";
+        this.renderer.domElement.style.width = "100vw";
+        this.renderer.domElement.style.height = "100vh";
+        this.renderer.domElement.style.zIndex = "1";
+        
         this.container.appendChild(this.renderer.domElement);
-    }
+    } // 【核心补全】补齐这里漏掉的 initEngine 闭合大括号
 
     createLighting() {
- // 【核心测试】改成自发光基础材质，并且强行打开网格线（wireframe: true）
-        // 这样不需要任何灯光，大碗会直接变成一个巨大的、由绿色线条组成的 3D 曲面大碗！
-        const material = new THREE.MeshBasicMaterial({
-            color: 0x00FF88, 
-            wireframe: true
-        });
-
         // 极光金橘色调的主定向光
         this.dirLight = new THREE.DirectionalLight(0xFF6B00, 0.8);
         this.dirLight.position.set(20, 40, 20);
@@ -90,10 +97,12 @@
             target.set(x, y, z);
         }, 40, 40);
 
-        // 极光白金发光网格材质// 【核心测试】改成不需要灯光的纯红自发光球体
+        // 【核心修改-自发光测试材质】改成亮绿色自发光线框网格材质，不依赖光照，一渲染立马就能看见大碗
         const material = new THREE.MeshBasicMaterial({
-            color: 0xFF0000
+            color: 0x00FF88, 
+            wireframe: true
         });
+        
         this.arenaMesh = new THREE.Mesh(geometry, material);
         this.scene.add(this.arenaMesh);
 
@@ -111,12 +120,10 @@
     createPlayerMesh() {
         // 动态根据半径生成球体
         const geometry = new THREE.SphereGeometry(this.playerData.radius, 32, 32);
-        const material = new THREE.MeshStandardMaterial({
-            color: 0xFFD700, // 初始金黄色
-            roughness: 0.1,
-            metalness: 0.9,
-            emissive: 0xFF6B00,
-            emissiveIntensity: 0.2
+        
+        // 【核心修改-自发光测试材质】改成不受灯光干扰的纯红色自发光球体，确保开局必亮
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xFF0000
         });
 
         this.playerMesh = new THREE.Mesh(geometry, material);
@@ -143,7 +150,8 @@
     // 4. 高频渲染、智能相机缩放与性能安全降级
     // ==========================================
     animate() {
-        requestAnimationFrame(() => this.animate());
+        // 【核心修改】死锁 requestAnimationFrame 的调用上下文，确保每一次循环循环不断流
+        requestAnimationFrame(this.animate.bind(this));
 
         const now = performance.now();
         const deltaTime = Math.min((now - this.lastFrameTime) / 1000, 0.1); // 限制单帧最大时间阻断断层
@@ -154,7 +162,9 @@
         this.updateCameraDynamicZoom();
 
         // 执行 WebGL 图形渲染
-        this.renderer.render(this.scene, this.camera);
+        if (this.scene && this.camera && this.renderer) {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
 
     updatePhysicsSimulation(dt) {
@@ -183,7 +193,9 @@
         }
 
         // 同步 3D 网格位置
-        this.playerMesh.position.copy(this.playerData.position);
+        if (this.playerMesh) {
+            this.playerMesh.position.copy(this.playerData.position);
+        }
     }
 
     updateCameraDynamicZoom() {
@@ -191,7 +203,7 @@
         const targetDistance = 25 + (this.playerData.mass * 2.5);
         const targetCameraY = 20 + (this.playerData.mass * 1.8);
 
-  // 使用平滑插值（Lerp）防止相机突变导致眼睛疲劳
+        // 使用平滑插值（Lerp）防止相机突变导致眼睛疲劳
         const currentTargetPos = new THREE.Vector3(
             this.playerData.position.x,
             this.playerData.position.y + 2,
@@ -208,8 +220,7 @@
         }
         
         this.camera.lookAt(this.playerData.position);
-        
-      
+    } // 【核心补全】补齐这里漏掉的 updateCameraDynamicZoom 闭合大括号
 
     // ==========================================
     // 5. 移动端低帧率自适应防护 (反闪退系统)
@@ -237,13 +248,16 @@
     }
 
     onWindowResize() {
+        if (!this.camera || !this.renderer) return;
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
     }
 }
 
-// 挂载启动主实例
-window.addEventListener('DOMContentLoaded', () => {
-    window.gameScene = new MainScene();
+// 挂载启动主实例（配合降级为标准引入，确保 100% 唤醒）
+window.addEventListener('load', () => {
+    if (!window.gameScene) {
+        window.gameScene = new MainScene();
+    }
 });
