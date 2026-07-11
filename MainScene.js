@@ -3,7 +3,6 @@
  * 职责：构建 3D 碗状竞技场、发光网格、动态相机追踪、以及移动端低帧率（FPS）降级反闪退机制
  */
 
-import { GameUI } from './GameUI.js';
 
 export class MainScene {
     constructor() {
