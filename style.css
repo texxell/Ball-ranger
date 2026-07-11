@@ -30,16 +30,15 @@ body, html {
     color: var(--text-pure);
 }
 
-/* 3D 渲染层：完全潜入底层 */
+/* 原来的 height: 100% 极其容易在 iOS 上坍塌为 0 */
 #game-canvas-container {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
+    width: 100vw;   /* 改成 100vw 强行撑满屏幕宽度 */
+    height: 100vh;  /* 改成 100vh 强行撑满屏幕高度 */
     z-index: 1;
 }
-
 /* UI 覆盖层：自身不响应阻断，仅子类元素响应指针，杜绝 Safari 触控崩溃 */
 #ui-root {
     position: absolute;
