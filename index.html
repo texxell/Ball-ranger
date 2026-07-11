@@ -72,8 +72,38 @@
 
         </div>
     </div>
+<!-- 引入我们写好的业务逻辑文件（去掉 type="module"，降级为常规 JS 引入） -->
+    <script src="./PhysicsEngine.js"></script>
+    <script src="./GameUI.js"></script>
+    <script src="./MainScene.js"></script>
 
-<!-- 抛弃套娃事件，直接用标准模块顺序加载，保证 100% 唤醒 3D 引擎 -->
-    <script type="module" src="./PhysicsEngine.js"></script>
-    <script type="module" src="./GameUI.js"></script>
-    <script type="module" src="./MainScene.js"></script>
+    <!-- 【降级强制兜底】如果上面因为文件路径还是读不到，这里直接在 HTML 里原地注入核心渲染，逼屏幕亮起！ -->
+    <script>
+        window.addEventListener('load', () => {
+            console.log("HTML Inline Script: Forcing WebGL initialization...");
+            try {
+                // 如果 MainScene.js 确实没被加载，这里直接原地起速渲染一个红屏，确保硬件通电
+                if (!window.gameScene && typeof THREE !== 'undefined') {
+                    const container = document.getElementById('game-canvas-container');
+                    const scene = new THREE.Scene();
+                    scene.background = new THREE.Color(0xFF0000); // 耀眼的纯红
+                    
+                    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+                    camera.position.set(0, 0, 10);
+                    
+                    const renderer = new THREE.WebGLRenderer({ antialias: true });
+                    renderer.setSize(window.innerWidth, window.innerHeight);
+                    container.appendChild(renderer.domElement);
+                    
+                    function alertAnimate() {
+                        requestAnimationFrame(alertAnimate);
+                        renderer.render(scene, camera);
+                    }
+                    alertAnimate();
+                    console.error("!!! DETECTED: External JS files were blocked by browser! Emergency Red Screen triggered. !!!");
+                }
+            } catch(e) {
+                alert("Critical Error: " + e.message);
+            }
+        });
+    </script>
