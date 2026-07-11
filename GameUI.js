@@ -1,15 +1,12 @@
 /**
- * BallRanger.io - GameUI.js
- * 职责：虚拟摇杆的向量转化、Dash 技能防抖触发及极光玻璃态 UI 交互反馈
+ * 步骤二：暴力触控排查版 GameUI.js
+ * 目标：强行把 UI 塞到最前面，戳破触控屏蔽。
  */
 class GameUI {
     constructor(onJoystickMove, onWeaponTrigger) {
-        console.log("GameUI: Building immersive dashboard interfaces...");
+        console.log("GameUI: 触控层排查初始化...");
         this.onJoystickMove = onJoystickMove;
         this.onWeaponTrigger = onWeaponTrigger;
-        
-        this.dashActive = false;
-        this.dashCooldown = 1500; // Dash 技能 1.5秒 CD
         
         this.initElements();
         this.bindEvents();
@@ -17,136 +14,76 @@ class GameUI {
 
     initElements() {
         this.joystick = document.getElementById('joystick');
-        this.joystickStick = document.getElementById('joystick-stick');
         this.dashBtn = document.getElementById('dash-btn');
-        this.alertOverlay = document.getElementById('center-alert');
+
+        // 【暴力置顶机制】直接用 JS 给按钮加最高层级，防止被 3D 画面挡住
+        if (this.joystick) {
+            this.joystick.style.position = "absolute";
+            this.joystick.style.zIndex = "9999";
+            this.joystick.style.pointerEvents = "auto";
+        }
+        if (this.dashBtn) {
+            this.dashBtn.style.position = "absolute";
+            this.dashBtn.style.zIndex = "9999";
+            this.dashBtn.style.pointerEvents = "auto";
+        }
     }
 
     bindEvents() {
-        // ---- DASH 技能按键触发与视觉反馈 ----
+        // 1. 测试 Dash 暴力拦截
         if (this.dashBtn) {
-            const executeDash = (e) => {
-                e.preventDefault();
-                if (this.dashActive) return; // 冷却中拦截
-
-                this.dashActive = true;
-                this.dashBtn.classList.add('cooldown-active');
-                this.dashBtn.style.transform = "scale(0.85)";
-                this.dashBtn.style.opacity = "0.4";
-
-                console.log("GameUI -> Dash vector intent broadcasted.");
+            const triggerDash = (e) => {
+                e.stopPropagation(); // 阻止事件传给 3D 画布
+                console.log("👉 硬件层：Dash 按钮真的被点到了！");
                 if (typeof this.onWeaponTrigger === 'function') {
                     this.onWeaponTrigger('dash');
                 }
-
-                // 恢复缩放
-                setTimeout(() => {
-                    this.dashBtn.style.transform = "scale(1)";
-                }, 100);
-
-                // 冷却时间截止恢复可用
-                setTimeout(() => {
-                    this.dashActive = false;
-                    this.dashBtn.classList.remove('cooldown-active');
-                    this.dashBtn.style.opacity = "1";
-                }, this.dashCooldown);
             };
-
-            this.dashBtn.addEventListener('touchstart', executeDash, { passive: false });
-            this.dashBtn.addEventListener('click', executeDash);
+            this.dashBtn.addEventListener('click', triggerDash);
+            this.dashBtn.addEventListener('touchstart', triggerDash, { passive: true });
         }
 
-        // ---- 虚拟摇杆多点触控向量驱动 ----
-        if (this.joystick) {
-            let touchId = null;
-            const rect = this.joystick.getBoundingClientRect();
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            const maxRadius = rect.width / 2;
+        // 2. 测试摇杆键盘替代（为了排查你设备上手指拖不动的问题，特意加上键盘方向键测试！）
+        window.addEventListener('keydown', (e) => {
+            let fx = 0, fy = 0;
+            if (e.key === 'ArrowUp' || e.key === 'w') fy = -1;
+            if (e.key === 'ArrowDown' || e.key === 's') fy = 1;
+            if (e.key === 'ArrowLeft' || e.key === 'a') fx = -1;
+            if (e.key === 'ArrowRight' || e.key === 'd') fx = 1;
 
-            const onStart = (e) => {
-                const touch = e.changedTouches ? e.changedTouches[0] : e;
-                touchId = touch.identifier ?? 'mouse';
-            };
-
-            const onMove = (e) => {
-                if (touchId === null) return;
-                
-                let activeTouch = null;
-                if (e.touches) {
-                    for (let i = 0; i < e.touches.length; i++) {
-                        if (e.touches[i].identifier === touchId) {
-                            activeTouch = e.touches[i];
-                            break;
-                        }
-                    }
-                } else {
-                    activeTouch = e;
-                }
-
-                if (!activeTouch) return;
-                e.preventDefault();
-
-                // 严密计算偏移向量
-                let deltaX = activeTouch.clientX - centerX;
-                let deltaY = activeTouch.clientY - centerY;
-                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-
-                if (distance > maxRadius) {
-                    deltaX = (deltaX / distance) * maxRadius;
-                    deltaY = (deltaY / distance) * maxRadius;
-                }
-
-                // 移动摇杆帽视觉反馈
-                if (this.joystickStick) {
-                    this.joystickStick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-                }
-
-                // 将归一化向量 [-1, 1] 回传给业务层
-                const forceX = deltaX / maxRadius;
-                const forceY = deltaY / maxRadius;
+            if (fx !== 0 || fy !== 0) {
+                console.log(`⌨️ 键盘映射输入: fx=${fx}, fy=${fy}`);
                 if (typeof this.onJoystickMove === 'function') {
-                    this.onJoystickMove(forceX, forceY);
+                    this.onJoystickMove(fx * 2, fy * 2);
                 }
-            };
+            }
+        });
 
-            const onEnd = () => {
-                touchId = null;
-                if (this.joystickStick) {
-                    this.joystickStick.style.transform = 'translate(0px, 0px)';
-                }
-                if (typeof this.onJoystickMove === 'function') {
-                    this.onJoystickMove(0, 0);
-                }
-            };
-
-            this.joystick.addEventListener('touchstart', onStart, { passive: false });
-            window.addEventListener('touchmove', onMove, { passive: false });
-            window.addEventListener('touchend', onEnd);
-            
-            // 兼容桌面端鼠标测试
-            this.joystick.addEventListener('mousedown', onStart);
-            window.addEventListener('mousemove', onMove);
-            window.addEventListener('mouseup', onEnd);
-        }
+        // 3. 原生鼠标直接拖拽屏幕测试（如果按钮按不到，直接在屏幕上点住拖动也能让球动）
+        let isDrawing = false;
+        window.addEventListener('mousedown', () => { isDrawing = true; });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            // 根据鼠标在屏幕上的移动位置计算方向
+            const fx = (e.clientX / window.innerWidth) - 0.5;
+            const fy = (e.clientY / window.innerHeight) - 0.5;
+            if (typeof this.onJoystickMove === 'function') {
+                this.onJoystickMove(fx * 0.1, fy * 0.1);
+            }
+        });
+        window.addEventListener('mouseup', () => { isDrawing = false; });
     }
 
-    /**
-     * 屏幕中央滚动广播通知
-     * @param {string} msg 
-     */
     showCenterAlert(msg) {
-        if (this.alertOverlay) {
-            this.alertOverlay.innerText = msg;
-            this.alertOverlay.style.opacity = "1";
-            setTimeout(() => {
-                this.alertOverlay.style.opacity = "0";
-            }, 2000);
-        } else {
-            console.log(`[UI Alert Window]: ${msg}`);
+        console.log(`[UI Alert]: ${msg}`);
+        const alertOverlay = document.getElementById('center-alert');
+        if (alertOverlay) {
+            alertOverlay.innerText = msg;
+            alertOverlay.style.opacity = "1";
+            alertOverlay.style.zIndex = "9999";
+            setTimeout(() => { alertOverlay.style.opacity = "0"; }, 1500);
         }
     }
 }
 
-// 挂载全局，彻底抹平模块沙箱阻断
 window.GameUI = GameUI;
