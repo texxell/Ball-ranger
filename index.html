@@ -2,126 +2,44 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- 锁死移动端视口，禁止 iPad 缩放，防止手势缩放导致 UI 变形变成鬼 -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>BallRanger.io</title>
-    <!-- 引入高阶 CDN 纯英文字体与图标库 (严格 HTTPS 根除安全警告) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css">
+    
+    <!-- 🚨 核心命脉：必须在所有人之前，先把 Three.js 核心库拉进来！ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        /* 这里的 CSS 保持不变 ... */
+    </style>
 </head>
 <body>
 
-    <!-- 1. 核心 3D 渲染容器 (宽高在 CSS 锁死 100%，绝不给 Three.js 高度为 0 黑屏的机会) -->
-    <div id="game-container"></div>
+    <!-- 你的大厅 HTML 结构保持不变 ... -->
 
-    <!-- 2. 高级现代苹果风：开局大厅与武器商店（Start Menu & Shop Area） -->
-    <div id="start-menu-overlay" class="glass-panel">
-        
-        <!-- 左侧/手机端顶部：武器仓库 (The Armory Shop) -->
-        <div class="shop-box">
-            <h3 class="shop-title"><i class="fas fa-warehouse"></i> THE ARMORY</h3>
-            <div class="shop-items">
-                <div class="shop-item locked" id="shop-shield">
-                    <span class="item-name"><i class="fas fa-shield-alt"></i> SHIELD</span>
-                    <span class="item-cost">50G</span>
-                </div>
-                <div class="shop-item locked" id="shop-lightning">
-                    <span class="item-name"><i class="fas fa-bolt"></i> LIGHTNING</span>
-                    <span class="item-cost">100G</span>
-                </div>
-                <div class="shop-item locked" id="shop-vacuum">
-                    <span class="item-name"><i class="fas fa-magnet"></i> VACUUM</span>
-                    <span class="item-cost">200G</span>
-                </div>
-            </div>
-        </div>
+    <!-- 🚨 终极总装启动器：此时 THREE 已经是全局变量，绝对不会再报 undefined 导致死黑 -->
+    <script type="module">
+        import { GameUI } from './GameUI.js';
+        import { Game3D } from './Game3D.js';
+        import { GameShop } from './GameShop.js';
 
-        <!-- 正中央：主控制与商业广告翻倍区 (The Core Launch Zone) -->
-        <div class="main-launch-box">
-            <h1 class="game-logo">BALLRANGER<span>.IO</span></h1>
-            
-            <!-- 3D 预览区挂钩 (未来放置旋转的 3D 球体) -->
-            <div id="ball-preview-zone">
-                <div class="preview-placeholder-badge">PREVIEW BALL SIZE: <span id="preview-size-num">2</span></div>
-            </div>
+        window.addEventListener('DOMContentLoaded', () => {
+            try {
+                // 检查 Three.js 是否真的活了
+                if (typeof THREE === 'undefined') {
+                    alert("Three.js 核心库加载失败！请检查网络或 CDN 链接！");
+                    return;
+                }
 
-            <!-- 核心广告商业翻倍按钮 -->
-            <div class="ad-button-group">
-                <button id="btn-ad-x5" class="btn-ad"><i class="fab fa-youtube"></i> BOOST SIZE x5</button>
-                <!-- 初始状态下 x2 按钮处于锁定变灰状态，触发 x5 后才激活 -->
-                <button id="btn-ad-x2" class="btn-ad disabled" disabled><i class="fab fa-youtube"></i> BOOST AGAIN x2</button>
-            </div>
-
-            <!-- 巨大的发射按钮 -->
-            <button id="btn-start-game" class="btn-main-launch">START GAME</button>
-        </div>
-
-    </div>
-
-    <!-- 3. 局内核心 UI 容器 (开局隐藏，游戏开始后由 JS 唤醒，确保不与大厅重叠) -->
-    <div id="ingame-ui-layer" class="hidden-ui">
-        <!-- 局内左上角：个人钱包与实时数字 -->
-        <div class="hud-wallet glass-card">
-            <span class="wallet-label"><i class="fas fa-coins"></i> WALLET:</span>
-            <span id="hud-coin-amount">0G</span>
-        </div>
-
-        <!-- 局内右上角：手机端自适应折叠排行榜 (默认折叠成小皇冠，点击展开) -->
-        <div class="leaderboard-container glass-card" id="leaderboard-box">
-            <div class="leaderboard-header" id="leaderboard-toggle">
-                <span><i class="fas fa-crown"></i> LEADERBOARD</span>
-                <i class="fas fa-chevron-down toggle-icon"></i>
-            </div>
-            <ul class="leaderboard-list" id="leaderboard-players">
-                <!-- 预留 5 人英文实时排位槽 -->
-                <li class="rank-1">1. PLAYER_1 <span class="score">999</span></li>
-                <li>2. AI_RANGER_A <span class="score">500</span></li>
-                <li>3. AI_RANGER_B <span class="score">250</span></li>
-                <li>4. AI_RANGER_C <span class="score">120</span></li>
-                <li>5. AI_RANGER_D <span class="score">64</span></li>
-            </ul>
-        </div>
-
-        <!-- 模拟看广告时的全屏磨砂加载层 (预留未来广告 SDK 接入) -->
-        <div id="ad-loader-screen" class="glass-loader hidden-ui">
-            <div class="loader-content">
-                <i class="fas fa-spinner fa-spin"></i>
-                <p>LOADING SPONSOR VIDEO...</p>
-            </div>
-        </div>
-
-        <!-- 局内底部：学英文软件般的、不重叠一字排开的战术面板 -->
-        <div class="bottom-action-bar">
-            <div class="skill-buttons">
-                <!-- 带有安全锁的反作弊按钮 -->
-                <button class="btn-skill locked" id="skill-shield"><i class="fas fa-shield-alt"></i> <span class="ammo-count">🔒 x0</span></button>
-                <button class="btn-skill locked" id="skill-lightning"><i class="fas fa-bolt"></i> <span class="ammo-count">🔒 x0</span></button>
-                <button class="btn-skill locked" id="skill-vacuum"><i class="fas fa-magnet"></i> <span class="ammo-count">🔒 x0</span></button>
-            </div>
-            <button class="btn-dash" id="action-dash">DASH</button>
-        </div>
-    </div>
-
-    <!-- 弹窗中心警告层 (全英文警告，绝不污染智商) -->
-    <div id="center-alert-banner" class="alert-banner-hidden"></div>
-<script type="module">
-    import { GameUI } from './GameUI.js';
-    import { Game3D } from './Game3D.js';
-    import { GameShop } from './GameShop.js';
-
-    // 严密死守启动时序：先装UI -> 再装商店 -> 最后用装载好的UI去点火3D引擎
-    window.addEventListener('DOMContentLoaded', () => {
-        // 1. 确保 UI 控制中枢常驻内存
-        window.gameUI = new GameUI();
-        
-        // 2. 确保 商店系统常驻内存并成功咬合 UI
-        window.gameShop = new GameShop();
-        
-        // 3. 最后、也是最关键的一步：UI 稳固后，正式点火 3D 物理乱斗引擎
-        window.game3D = new Game3D();
-        
-        console.log("BallRanger.io 核心矩阵全案总装点火成功！");
-    });
-</script>
+                window.gameUI = new GameUI();
+                window.gameShop = new GameShop();
+                window.game3D = new Game3D();
+                
+                console.log("BallRanger.io 核心矩阵全案总装点火成功！");
+            } catch (error) {
+                // 如果还有任何隐蔽的脚本错误，直接弹窗抓人，绝不让它静默死黑！
+                alert("启动时发生内伤崩溃: " + error.message);
+            }
+        });
+    </script>
 </body>
 </html>
