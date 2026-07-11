@@ -56,18 +56,27 @@ class MainScene {
         this.scene.add(dirLight);
     }
 
-    buildEnvironment() {
-        const geometry = new THREE.CylinderGeometry(this.arenaRadius, this.arenaRadius * 0.4, 8, 64, 4, true);
+ buildEnvironment() {
+        // 把高度从 8 变成 2，半径拉大到 30，确保在 iPad 屏幕上看起来是一只全尺寸的平底大格斗碗！
+        const geometry = new THREE.CylinderGeometry(this.arenaRadius, this.arenaRadius * 0.9, 2, 64, 1, false);
         this.arenaMaterial = new THREE.MeshStandardMaterial({
             color: 0x00ffcc,
-            roughness: 0.2,
-            metalness: 0.7,
+            roughness: 0.3,
+            metalness: 0.8,
             side: THREE.DoubleSide,
-            flatShading: true
+            wireframe: false // 变成实心的青色未来感大盘
         });
         this.arenaMesh = new THREE.Mesh(geometry, this.arenaMaterial);
-        this.arenaMesh.position.y = 3;
+        this.arenaMesh.position.y = -1; // 让表面刚好水平
         this.scene.add(this.arenaMesh);
+
+        // 加上格斗场中心的黑洞深渊视觉
+        const holeGeo = new THREE.CircleGeometry(4, 32);
+        const holeMat = new THREE.MeshBasicMaterial({ color: 0x050508 });
+        const hole = new THREE.Mesh(holeGeo, holeMat);
+        hole.rotation.x = -Math.PI / 2;
+        hole.position.y = -0.95;
+        this.scene.add(hole);
     }
 
     initEntities() {
