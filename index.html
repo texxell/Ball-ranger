@@ -104,9 +104,24 @@
 
     <!-- 弹窗中心警告层 (全英文警告，绝不污染智商) -->
     <div id="center-alert-banner" class="alert-banner-hidden"></div>
-<script type="module" src="GameUI.js"></script>
-    <script type="module" src="Game3D.js"></script>
-    <script type="module" src="GameShop.js"></script>
-    
+<script type="module">
+    import { GameUI } from './GameUI.js';
+    import { Game3D } from './Game3D.js';
+    import { GameShop } from './GameShop.js';
+
+    // 严密死守启动时序：先装UI -> 再装商店 -> 最后用装载好的UI去点火3D引擎
+    window.addEventListener('DOMContentLoaded', () => {
+        // 1. 确保 UI 控制中枢常驻内存
+        window.gameUI = new GameUI();
+        
+        // 2. 确保 商店系统常驻内存并成功咬合 UI
+        window.gameShop = new GameShop();
+        
+        // 3. 最后、也是最关键的一步：UI 稳固后，正式点火 3D 物理乱斗引擎
+        window.game3D = new Game3D();
+        
+        console.log("BallRanger.io 核心矩阵全案总装点火成功！");
+    });
+</script>
 </body>
 </html>
