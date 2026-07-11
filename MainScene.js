@@ -39,13 +39,17 @@ export class MainScene {
 
     // ==========================================
     // 1. WebGL 引擎环境初始化
-    // ==========================================
-    initEngine() {
+initEngine() {
         this.scene = new THREE.Scene();
-        // 配合赛博星舰背景，使用深灰色虚空
-        this.scene.background = new THREE.Color(0x0F0F12); 
-        this.scene.fog = new THREE.FogExp2(0x0F0F12, 0.015);
-
+        
+        // 【核心测试 1】把背景色强行改成刺眼的纯红色！
+        // 如果网页变成了纯红色，说明 Three.js 成功跑通了，纯黑只是因为没光或者没东西。
+        // 如果依然是纯黑色，说明这段渲染代码压根就没被浏览器执行！
+        this.scene.background = new THREE.Color(0xFF0000); 
+        
+        // 【核心测试 2】故意制造一个红色报错，逼控制台说话！
+        // 如果控制台跳出了这个自定义错误，证明 initEngine 被调用了。
+        console.error("!!! BREAKPOINT: IF YOU SEE THIS, JS IS ALIVE !!!");
         // 透视相机：初始化视角
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         
