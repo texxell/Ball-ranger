@@ -1,12 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <!-- 针对 iPad 完美优化的视口配置：禁止长按、禁止双击缩放、禁止橡皮鞭下拉刷新 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>3D 大乱斗格斗场 - iPad 完美操控版</title>
+    <title>Ball Ranger</title>
     <style>
-        /* 1. 锁死全屏，防止 iPad 出现网页晃动或滚动条 */
         * {
             box-sizing: border-box;
             -webkit-user-select: none;
@@ -20,31 +18,24 @@
             height: 100%;
             overflow: hidden;
             background-color: #050508;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
-
-        /* 2. 3D 游戏画面层：沉在最底下 */
         #game-container {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 1; /* 最底层 */
+            z-index: 1;
         }
-
-        /* 3. UI 容器层：浮在 3D 画布上方，但自身不拦截触控 */
         #ui-layer {
             position: absolute;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            z-index: 99999; /* 确保在外太空层级，绝对不会被 3D 盖住 */
-            pointer-events: none; /* 关键：这一层本身是透明空气，让触控能穿透到左侧全屏 */
+            z-index: 99999;
+            pointer-events: none;
         }
-
-        /* 4. 左下角虚拟摇杆：只负责视觉显示，逻辑我们走全屏左侧拖拽 */
         #joystick {
             position: fixed;
             bottom: 40px;
@@ -57,20 +48,16 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
         }
         #joystick-knob {
             width: 40px;
             height: 40px;
             background: #00ffcc;
             border-radius: 50%;
-            box-shadow: 0 0 10px #00ffcc;
         }
-
-        /* 5. 右侧按钮公共样式：开启 pointer-events 重新捕获触控 */
         .action-btn {
             position: fixed;
-            pointer-events: auto; /* 必须激活，让 iPad 能精准点到 */
+            pointer-events: auto;
             color: white;
             font-weight: bold;
             border: none;
@@ -79,13 +66,12 @@
             align-items: center;
             justify-content: center;
             touch-action: none;
-            active-transform: scale(0.9);
         }
-
-        /* 红色 DASH 冲刺按钮：放在最右下角 */
+        
+        /* Main Big Dash Button at the bottom right corner */
         #dash-btn {
-            bottom: 40px;
-            right: 40px;
+            bottom: 30px;
+            right: 30px;
             width: 90px;
             height: 90px;
             border-radius: 50%;
@@ -95,20 +81,45 @@
             box-shadow: 0 0 20px rgba(255, 51, 68, 0.6);
         }
 
-        /* 蓝色 ATTACK 武器按钮：稳稳挪到右下角上方，绝不重叠 */
-        #weapon-btn {
-            bottom: 150px; /* 抬高 110px 错开 */
-            right: 50px;  /* 稍微内缩 */
-            width: 75px;
-            height: 75px;
+        /* Weapon 1 Button - directly above Dash */
+        #weapon1-btn {
+            bottom: 140px;
+            right: 35px;
+            width: 65px;
+            height: 65px;
             border-radius: 50%;
             background: #0099ff;
-            font-size: 15px;
-            border: 3px solid #ffffff;
-            box-shadow: 0 0 15px rgba(0, 153, 255, 0.6);
+            font-size: 14px;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 12px rgba(0, 153, 255, 0.5);
         }
 
-        /* 6. 游戏中央通知弹窗 */
+        /* Weapon 2 Button - top-left diagonal to Dash */
+        #weapon2-btn {
+            bottom: 115px;
+            right: 115px;
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            background: #00cc66;
+            font-size: 14px;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 12px rgba(0, 204, 102, 0.5);
+        }
+
+        /* Weapon 3 Button - directly left to Dash */
+        #weapon3-btn {
+            bottom: 30px;
+            right: 140px;
+            width: 65px;
+            height: 65px;
+            border-radius: 50%;
+            background: #ff9900;
+            font-size: 14px;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 12px rgba(255, 153, 0, 0.5);
+        }
+
         #center-alert {
             position: fixed;
             top: 20%;
@@ -121,46 +132,33 @@
             padding: 12px 24px;
             border-radius: 8px;
             opacity: 0;
-            transition: opacity 0.2s ease-in-out;
             pointer-events: none;
-            border: 1px solid rgba(255,51,68,0.3);
         }
     </style>
-
-    <!-- 依次引入 Three.js 核心库与你的业务逻辑脚本 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="PhysicsEngine.js"></script>
     <script src="GameUI.js"></script>
     <script src="MainScene.js"></script>
 </head>
 <body>
-
-    <!-- 1. 游戏 3D 渲染画布容器 -->
     <div id="game-container"></div>
-
-    <!-- 2. UI 及触控核心控制层 -->
     <div id="ui-layer">
-        <!-- 左下角摇杆视觉反馈（不拦截触控，靠 JS 捕捉左半屏幕） -->
         <div id="joystick">
             <div id="joystick-knob"></div>
         </div>
-
-        <!-- 右侧分立双按钮 -->
+        
+        <!-- The 4 Action Buttons -->
         <button id="dash-btn" class="action-btn">DASH</button>
-        <button id="weapon-btn" class="action-btn">ATTACK</button>
-
-        <!-- 中央提示区 -->
+        <button id="weapon1-btn" class="action-btn">W1</button>
+        <button id="weapon2-btn" class="action-btn">W2</button>
+        <button id="weapon3-btn" class="action-btn">W3</button>
+        
         <div id="center-alert"></div>
     </div>
-
-    <!-- 3. 游戏启动引导：等待所有资源加载完毕后实例化 -->
     <script>
         window.addEventListener('load', () => {
-            console.log("🚀 HTML 结构重洗成功，正在拉起游戏主程序...");
             if (typeof window.MainScene === 'function') {
                 window.gameInstance = new window.MainScene();
-            } else {
-                console.error("❌ 启动失败：未能找到 MainScene.js，请确保该文件在同一目录下且没有语法错误。");
             }
         });
     </script>
