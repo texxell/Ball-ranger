@@ -73,15 +73,7 @@
         </div>
     </div>
 
-    <!-- 异步模块化游戏逻辑加载 -->
-    <script type="module">
-        window.addEventListener('DOMContentLoaded', () => {
-            // 确保 DOM 加载完毕后，依次初始化游戏核心模块
-            import('./PhysicsEngine.js').then(() => {
-                import('./GameUI.js');
-                import('./MainScene.js');
-            });
-        });
-    </script>
-</body>
-</html>
+<!-- 抛弃套娃事件，直接用标准模块顺序加载，保证 100% 唤醒 3D 引擎 -->
+    <script type="module" src="./PhysicsEngine.js"></script>
+    <script type="module" src="./GameUI.js"></script>
+    <script type="module" src="./MainScene.js"></script>
