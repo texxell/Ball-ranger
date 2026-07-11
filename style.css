@@ -1,0 +1,362 @@
+/* ==========================================================================
+   1. 基础重置与底层全局变量 (赛博白金 / 极光玻璃风格)
+   ========================================================================== */
+:root {
+    --bg-dark: #0F0F12;
+    --text-pure: #FFFFFF;
+    --accent-orange: #FF6B00;
+    --gold-glow: #FFD700;
+    --glass-bg: rgba(255, 255, 255, 0.06);
+    --glass-border: rgba(255, 255, 255, 0.12);
+    --glass-blur: blur(12px);
+    --font-standard: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-user-select: none; /* 禁用 Safari 文本选中 */
+    user-select: none;
+    -webkit-touch-callout: none; /* 禁用 iOS 长按菜单 */
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--bg-dark);
+    font-family: var(--font-standard);
+    color: var(--text-pure);
+}
+
+/* 3D 渲染层：完全潜入底层 */
+#game-canvas-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+/* UI 覆盖层：自身不响应阻断，仅子类元素响应指针，杜绝 Safari 触控崩溃 */
+#ui-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    pointer-events: none; 
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* ==========================================================================
+   2. 通用玻璃态组件规范
+   ========================================================================== */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    color: var(--text-pure);
+    pointer-events: auto;
+}
+
+/* ==========================================================================
+   3. 顶部横幅与状态控制
+   ========================================================================== */
+#top-status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 15px 20px;
+}
+
+#wallet-display, #score-display {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    letter-spacing: 0.5px;
+    pointer-events: auto;
+}
+
+#wallet-display {
+    border-color: rgba(255, 215, 0, 0.3);
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
+}
+
+/* 全局提示通知栏 (新纪录、击杀) */
+#notification-banner {
+    position: absolute;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(90deg, rgba(255,107,0,0.2) 0%, rgba(255,107,0,0.8) 50%, rgba(255,107,0,0.2) 100%);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-top: 1px solid var(--accent-orange);
+    border-bottom: 1px solid var(--accent-orange);
+    color: #FFFFFF;
+    padding: 8px 40px;
+    font-weight: 900;
+    font-size: 1.2rem;
+    text-shadow: 0 0 8px #FF6B00;
+    white-space: nowrap;
+    z-index: 100;
+    transition: all 0.3s ease;
+}
+
+/* 屏幕中央的解锁警告弹窗 */
+#center-alert {
+    position: absolute;
+    top: 45%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15, 15, 18, 0.95);
+    border: 2px solid var(--accent-orange);
+    box-shadow: 0 0 25px rgba(255, 107, 0, 0.4);
+    color: var(--text-pure);
+    padding: 20px 35px;
+    border-radius: 12px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: 1px;
+    z-index: 110;
+    text-align: center;
+    transition: opacity 0.15s ease-in-out;
+}
+
+.hidden {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* ==========================================================================
+   4. 实时排行榜 (带智能自适应折叠)
+   ========================================================================== */
+#leaderboard {
+    position: absolute;
+    top: 80px;
+    right: 20px;
+    width: 240px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 15px;
+    pointer-events: auto;
+    transition: all 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+#leaderboard-toggle {
+    font-weight: 800;
+    font-size: 0.9rem;
+    color: #FFD700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+#leaderboard-list {
+    list-style: none;
+    font-size: 0.85rem;
+    line-height: 1.8;
+}
+
+#leaderboard-list li {
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    padding: 2px 0;
+}
+
+/* ==========================================================================
+   5. 底部主控布局：摇杆与一字排开的技能槽
+   ========================================================================== */
+#bottom-controls-container {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 0 20px 20px 20px;
+}
+
+/* 虚拟摇杆操作区 */
+#joystick-zone {
+    width: 140px;
+    height: 140px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    pointer-events: auto;
+}
+
+#joystick-base {
+    width: 110px;
+    height: 110px;
+    background: rgba(255,255,255,0.05);
+    border: 2px solid rgba(255,255,255,0.2);
+    border-radius: 50%;
+    position: relative;
+}
+
+#joystick-handle {
+    width: 45px;
+    height: 45px;
+    background: linear-gradient(135deg, #FFFFFF 0%, #B5B5B5 100%);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+    border-radius: 50%;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    transition: transform 0.05s linear;
+}
+
+/* 技能与冲刺动作组 */
+#skill-action-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    pointer-events: auto;
+}
+
+/* 基础技能按键规范 */
+.skill-btn {
+    width: 60px;
+    height: 60px;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: var(--text-pure);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.skill-btn .icon {
+    font-size: 1.4rem;
+}
+
+.skill-btn .ammo {
+    font-size: 0.65rem;
+    margin-top: 2px;
+    color: rgba(255,255,255,0.6);
+}
+
+/* 技能锁状态样式 */
+.skill-btn.locked {
+    border-color: rgba(255,255,255,0.05);
+    background: rgba(0,0,0,0.3);
+}
+.skill-btn.locked .icon {
+    opacity: 0.4;
+}
+.skill-btn.locked .ammo {
+    color: var(--accent-orange);
+    font-weight: bold;
+}
+
+/* 大型极光冲刺按键 */
+.action-btn {
+    width: 90px;
+    height: 60px;
+    background: linear-gradient(135deg, #FF6B00 0%, #FFA500 100%);
+    border: none;
+    border-radius: 14px;
+    color: white;
+    font-weight: 900;
+    font-size: 1.1rem;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 15px rgba(255, 107, 0, 0.3);
+    cursor: pointer;
+}
+
+.skill-btn:active, .action-btn:active {
+    transform: scale(0.92);
+}
+
+/* ==========================================================================
+   6. 手机视口深度适配（Media Queries 断点保护）
+   ========================================================================== */
+@media (max-width: 767px) {
+    /* 1. 排行榜自动坍塌为微型图标状态 */
+    #leaderboard.collapsed-mobile {
+        width: 48px;
+        height: 48px;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        border-radius: 50%;
+        top: 75px;
+        right: 15px;
+        overflow: hidden;
+    }
+    
+    #leaderboard.collapsed-mobile #leaderboard-toggle {
+        margin-bottom: 0;
+        font-size: 1.3rem;
+    }
+
+    #leaderboard.collapsed-mobile .title-text,
+    #leaderboard.collapsed-mobile #leaderboard-list {
+        display: none; /* 完美隐藏列表，绝不产生叠加阴影 */
+    }
+
+    /* 2. 底部控制区在小屏幕上改用自适应上下紧凑排列，释放超80%的核心3D区 */
+    #bottom-controls-container {
+        flex-direction: row;
+        align-items: flex-end;
+        padding: 0 10px 15px 10px;
+    }
+
+    #joystick-zone {
+        width: 100px;
+        height: 100px;
+    }
+    #joystick-base {
+        width: 90px;
+        height: 90px;
+    }
+    #joystick-handle {
+        width: 38px;
+        height: 38px;
+    }
+
+    #skill-action-bar {
+        gap: 6px; /* 进一步压缩间距防溢出 */
+    }
+
+    .skill-btn {
+        width: 52px;
+        height: 52px;
+        border-radius: 10px;
+    }
+    .skill-btn .icon { font-size: 1.2rem; }
+
+    .action-btn {
+        width: 75px;
+        height: 52px;
+        border-radius: 10px;
+        font-size: 0.95rem;
+    }
+}
