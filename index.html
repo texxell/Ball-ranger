@@ -2,165 +2,108 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <!-- 锁死移动端视口，禁止 iPad 缩放，防止手势缩放导致 UI 变形变成鬼 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Ball Ranger</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            -webkit-user-select: none;
-            user-select: none;
-            -webkit-touch-callout: none;
-        }
-        html, body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #050508;
-        }
-        #game-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
-        #ui-layer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 99999;
-            pointer-events: none;
-        }
-        #joystick {
-            position: fixed;
-            bottom: 40px;
-            left: 40px;
-            width: 100px;
-            height: 100px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 3px solid rgba(0, 255, 204, 0.5);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        #joystick-knob {
-            width: 40px;
-            height: 40px;
-            background: #00ffcc;
-            border-radius: 50%;
-        }
-        .action-btn {
-            position: fixed;
-            pointer-events: auto;
-            color: white;
-            font-weight: bold;
-            border: none;
-            outline: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            touch-action: none;
-        }
-        
-        /* Main Big Dash Button at the bottom right corner */
-        #dash-btn {
-            bottom: 30px;
-            right: 30px;
-            width: 90px;
-            height: 90px;
-            border-radius: 50%;
-            background: #ff3344;
-            font-size: 18px;
-            border: 4px solid #ffffff;
-            box-shadow: 0 0 20px rgba(255, 51, 68, 0.6);
-        }
-
-        /* Weapon 1 Button - directly above Dash */
-        #weapon1-btn {
-            bottom: 140px;
-            right: 35px;
-            width: 65px;
-            height: 65px;
-            border-radius: 50%;
-            background: #0099ff;
-            font-size: 14px;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 12px rgba(0, 153, 255, 0.5);
-        }
-
-        /* Weapon 2 Button - top-left diagonal to Dash */
-        #weapon2-btn {
-            bottom: 115px;
-            right: 115px;
-            width: 65px;
-            height: 65px;
-            border-radius: 50%;
-            background: #00cc66;
-            font-size: 14px;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 12px rgba(0, 204, 102, 0.5);
-        }
-
-        /* Weapon 3 Button - directly left to Dash */
-        #weapon3-btn {
-            bottom: 30px;
-            right: 140px;
-            width: 65px;
-            height: 65px;
-            border-radius: 50%;
-            background: #ff9900;
-            font-size: 14px;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 12px rgba(255, 153, 0, 0.5);
-        }
-
-        #center-alert {
-            position: fixed;
-            top: 20%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #ff3344;
-            font-size: 24px;
-            font-weight: bold;
-            background: rgba(0,0,0,0.85);
-            padding: 12px 24px;
-            border-radius: 8px;
-            opacity: 0;
-            pointer-events: none;
-        }
-    </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="PhysicsEngine.js"></script>
-    <script src="GameUI.js"></script>
-    <script src="MainScene.js"></script>
+    <title>BallRanger.io</title>
+    <!-- 引入高阶 CDN 纯英文字体与图标库 (严格 HTTPS 根除安全警告) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <!-- 1. 核心 3D 渲染容器 (宽高在 CSS 锁死 100%，绝不给 Three.js 高度为 0 黑屏的机会) -->
     <div id="game-container"></div>
-    <div id="ui-layer">
-        <div id="joystick">
-            <div id="joystick-knob"></div>
+
+    <!-- 2. 高级现代苹果风：开局大厅与武器商店（Start Menu & Shop Area） -->
+    <div id="start-menu-overlay" class="glass-panel">
+        
+        <!-- 左侧/手机端顶部：武器仓库 (The Armory Shop) -->
+        <div class="shop-box">
+            <h3 class="shop-title"><i class="fas fa-warehouse"></i> THE ARMORY</h3>
+            <div class="shop-items">
+                <div class="shop-item locked" id="shop-shield">
+                    <span class="item-name"><i class="fas fa-shield-alt"></i> SHIELD</span>
+                    <span class="item-cost">50G</span>
+                </div>
+                <div class="shop-item locked" id="shop-lightning">
+                    <span class="item-name"><i class="fas fa-bolt"></i> LIGHTNING</span>
+                    <span class="item-cost">100G</span>
+                </div>
+                <div class="shop-item locked" id="shop-vacuum">
+                    <span class="item-name"><i class="fas fa-magnet"></i> VACUUM</span>
+                    <span class="item-cost">200G</span>
+                </div>
+            </div>
         </div>
-        
-        <!-- The 4 Action Buttons -->
-        <button id="dash-btn" class="action-btn">DASH</button>
-        <button id="weapon1-btn" class="action-btn">W1</button>
-        <button id="weapon2-btn" class="action-btn">W2</button>
-        <button id="weapon3-btn" class="action-btn">W3</button>
-        
-        <div id="center-alert"></div>
+
+        <!-- 正中央：主控制与商业广告翻倍区 (The Core Launch Zone) -->
+        <div class="main-launch-box">
+            <h1 class="game-logo">BALLRANGER<span>.IO</span></h1>
+            
+            <!-- 3D 预览区挂钩 (未来放置旋转的 3D 球体) -->
+            <div id="ball-preview-zone">
+                <div class="preview-placeholder-badge">PREVIEW BALL SIZE: <span id="preview-size-num">2</span></div>
+            </div>
+
+            <!-- 核心广告商业翻倍按钮 -->
+            <div class="ad-button-group">
+                <button id="btn-ad-x5" class="btn-ad"><i class="fab fa-youtube"></i> BOOST SIZE x5</button>
+                <!-- 初始状态下 x2 按钮处于锁定变灰状态，触发 x5 后才激活 -->
+                <button id="btn-ad-x2" class="btn-ad disabled" disabled><i class="fab fa-youtube"></i> BOOST AGAIN x2</button>
+            </div>
+
+            <!-- 巨大的发射按钮 -->
+            <button id="btn-start-game" class="btn-main-launch">START GAME</button>
+        </div>
+
     </div>
-    <script>
-        window.addEventListener('load', () => {
-            if (typeof window.MainScene === 'function') {
-                window.gameInstance = new window.MainScene();
-            }
-        });
-    </script>
+
+    <!-- 3. 局内核心 UI 容器 (开局隐藏，游戏开始后由 JS 唤醒，确保不与大厅重叠) -->
+    <div id="ingame-ui-layer" class="hidden-ui">
+        <!-- 局内左上角：个人钱包与实时数字 -->
+        <div class="hud-wallet glass-card">
+            <span class="wallet-label"><i class="fas fa-coins"></i> WALLET:</span>
+            <span id="hud-coin-amount">0G</span>
+        </div>
+
+        <!-- 局内右上角：手机端自适应折叠排行榜 (默认折叠成小皇冠，点击展开) -->
+        <div class="leaderboard-container glass-card" id="leaderboard-box">
+            <div class="leaderboard-header" id="leaderboard-toggle">
+                <span><i class="fas fa-crown"></i> LEADERBOARD</span>
+                <i class="fas fa-chevron-down toggle-icon"></i>
+            </div>
+            <ul class="leaderboard-list" id="leaderboard-players">
+                <!-- 预留 5 人英文实时排位槽 -->
+                <li class="rank-1">1. PLAYER_1 <span class="score">999</span></li>
+                <li>2. AI_RANGER_A <span class="score">500</span></li>
+                <li>3. AI_RANGER_B <span class="score">250</span></li>
+                <li>4. AI_RANGER_C <span class="score">120</span></li>
+                <li>5. AI_RANGER_D <span class="score">64</span></li>
+            </ul>
+        </div>
+
+        <!-- 模拟看广告时的全屏磨砂加载层 (预留未来广告 SDK 接入) -->
+        <div id="ad-loader-screen" class="glass-loader hidden-ui">
+            <div class="loader-content">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>LOADING SPONSOR VIDEO...</p>
+            </div>
+        </div>
+
+        <!-- 局内底部：学英文软件般的、不重叠一字排开的战术面板 -->
+        <div class="bottom-action-bar">
+            <div class="skill-buttons">
+                <!-- 带有安全锁的反作弊按钮 -->
+                <button class="btn-skill locked" id="skill-shield"><i class="fas fa-shield-alt"></i> <span class="ammo-count">🔒 x0</span></button>
+                <button class="btn-skill locked" id="skill-lightning"><i class="fas fa-bolt"></i> <span class="ammo-count">🔒 x0</span></button>
+                <button class="btn-skill locked" id="skill-vacuum"><i class="fas fa-magnet"></i> <span class="ammo-count">🔒 x0</span></button>
+            </div>
+            <button class="btn-dash" id="action-dash">DASH</button>
+        </div>
+    </div>
+
+    <!-- 弹窗中心警告层 (全英文警告，绝不污染智商) -->
+    <div id="center-alert-banner" class="alert-banner-hidden"></div>
+
 </body>
 </html>
