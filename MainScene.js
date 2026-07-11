@@ -56,8 +56,12 @@
     }
 
     createLighting() {
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-        this.scene.add(ambientLight);
+ // 【核心测试】改成自发光基础材质，并且强行打开网格线（wireframe: true）
+        // 这样不需要任何灯光，大碗会直接变成一个巨大的、由绿色线条组成的 3D 曲面大碗！
+        const material = new THREE.MeshBasicMaterial({
+            color: 0x00FF88, 
+            wireframe: true
+        });
 
         // 极光金橘色调的主定向光
         this.dirLight = new THREE.DirectionalLight(0xFF6B00, 0.8);
@@ -86,14 +90,10 @@
             target.set(x, y, z);
         }, 40, 40);
 
-        // 极光白金发光网格材质
-        const material = new THREE.MeshStandardMaterial({
-            color: 0x22222B,
-            roughness: 0.2,
-            metalness: 0.8,
-            wireframe: false
+        // 极光白金发光网格材质// 【核心测试】改成不需要灯光的纯红自发光球体
+        const material = new THREE.MeshBasicMaterial({
+            color: 0xFF0000
         });
-
         this.arenaMesh = new THREE.Mesh(geometry, material);
         this.scene.add(this.arenaMesh);
 
