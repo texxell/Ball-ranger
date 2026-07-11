@@ -49,6 +49,10 @@ export class MainScene {
         // 透视相机：初始化视角
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
         
+        // 【核心修改】给相机一个初始的高空后方坐标，防止它在 (0,0,0) 埋在球体内部导致画面全黑
+        this.camera.position.set(0, 30, 40); 
+        this.camera.lookAt(0, 0, 0);
+        
         this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 限制双倍像素比，防止高分屏 iPad 烧显卡
@@ -193,17 +197,25 @@ export class MainScene {
         const targetDistance = 25 + (this.playerData.mass * 2.5);
         const targetCameraY = 20 + (this.playerData.mass * 1.8);
 
-        // 使用平滑插值（Lerp）防止相机突变导致眼睛疲劳
+  // 使用平滑插值（Lerp）防止相机突变导致眼睛疲劳
         const currentTargetPos = new THREE.Vector3(
             this.playerData.position.x,
             this.playerData.position.y + 2,
             this.playerData.position.z + targetDistance
         );
         
-        this.camera.position.lerp(currentTargetPos, 0.05);
-        this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, this.playerData.position.y + targetCameraY, 0.05);
+        // 【核心修改】如果相机离目标太近或者处于刚开局状态，直接强制切过去，避免第一帧数学矩阵失效
+        if (this.camera.position.lengthSq() < 2000) {
+            this.camera.position.copy(currentTargetPos);
+            this.camera.position.y = this.playerData.position.y + targetCameraY;
+        } else {
+            this.camera.position.lerp(currentTargetPos, 0.05);
+            this.camera.position.y = THREE.MathUtils.lerp(this.camera.position.y, this.playerData.position.y + targetCameraY, 0.05);
+        }
+        
         this.camera.lookAt(this.playerData.position);
-    }
+        
+      
 
     // ==========================================
     // 5. 移动端低帧率自适应防护 (反闪退系统)
