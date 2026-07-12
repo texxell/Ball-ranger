@@ -39,7 +39,7 @@ export class GameUI {
         this.domAlertBox = document.getElementById('alert-msg-box');
         this.domAlertText = document.getElementById('alert-text');
         
-        // 动态创建盲操视觉皮肤（默认彻底隐藏，手指按下去才显形）
+        // 动态创建盲操视觉皮肤（默认彻底隐藏，手指按下去才显形
         this.createDynamicJoystick();
     }
 
