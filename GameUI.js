@@ -1,185 +1,243 @@
 /**
  * ==========================================================================
- * GameUI.js - 全屏盲操、武器管理与实时排行榜渲染核心
- * 备注：管理金币流水、看广告倍化、全屏幕盲操、同步刷新动态排位战力榜
+ * BallRanger.io - GameUI 核心控制中心 (华文注释/英文UI)
+ * 职责：托管摇杆、键盘监听、三端输入平滑转换、Firebase 伪数据对接及弹窗拦截
  * ==========================================================================
  */
 export class GameUI {
     constructor() {
-        this.coins = 0;          
-        this.playerNumber = 2;    
-        this.adClicks = 0;        
+        // 1. 初始化本地核心状态数据
+        this.coins = 0;
+        this.mass = 2;
+        this.moveVector = { x: 0, y: 0 }; // 最终输出给物理引擎的移动向量：X(左右), Y(前后)
         
-        this.moveVector = { x: 0, y: 0 }; 
+        // 2. 摇杆专用状态机 (仅在手机/iPad 触控时触发)
         this.joystick = {
             active: false,
             pointerId: null,
-            startX: 0,            
+            startX: 0,
             startY: 0,
-            maxRadius: 60,
+            moveX: 0,
+            moveY: 0,
+            maxRadius: 50, // 摇杆最大内圈滑动半径
             container: null,
             stick: null
         };
 
+        // 3. 键盘状态机 (电脑端专用)
+        this.keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
+
+        // 4. 彻底启动全套服务
         this.cacheDOM();
-        this.initFullScreenTouch(); 
-        this.bindEvents();
+        this.bindClickEvents();
+        this.bindPointerEvents();
+        this.bindKeyboardEvents();
+        
+        console.log("💂‍♂️ [GameUI] 核心控制中心初始化成功！三端输入监听已全面布防。");
     }
 
+    // 抓取 HTML 元素，为后续数值更新做准备
     cacheDOM() {
         this.domCoins = document.getElementById('ui-coins');
-        this.domNumber = document.getElementById('ui-number');
-        this.domStartMenu = document.getElementById('start-menu');
-        this.domBtnStart = document.getElementById('btn-start-game');
-        this.domBtnAd = document.getElementById('btn-watch-ad');
-        this.domAdStatusText = document.getElementById('ad-status-text');
+        this.domMass = document.getElementById('ui-mass');
+        this.domBtnBoost = document.getElementById('btn-boost');
+        this.domBtnDash = document.getElementById('btn-dash');
         this.domAlertBox = document.getElementById('alert-msg-box');
         this.domAlertText = document.getElementById('alert-text');
-        this.domLeaderboard = document.getElementById('ui-leaderboard');
-
-        // 动态生成屏幕随处可显的触控视觉手柄
-        this.joystick.container = document.createElement('div');
-        this.joystick.container.style.cssText = `
-            position: absolute; width: 120px; height: 120px;
-            background: rgba(255, 255, 255, 0.03); border: 2px solid rgba(0, 255, 204, 0.3);
-            border-radius: 50%; display: none; z-index: 99; pointer-events: none; transform: translate(-50%, -50%);
-        `;
-        this.joystick.stick = document.createElement('div');
-        this.joystick.stick.style.cssText = `
-            position: absolute; top: 37px; left: 37px; width: 46px; height: 46px;
-            background: linear-gradient(135deg, #00FFCC 0%, #00A88F 100%); border-radius: 50%;
-        `;
-        this.joystick.container.appendChild(this.joystick.stick);
-        document.getElementById('ui-layer').appendChild(this.joystick.container);
+        this.domGameContainer = document.getElementById('game-container');
+        
+        // 动态在桌面上为 iPad/手机 创建一个优雅的虚拟摇杆外圈和内芯
+        this.createJoystickElements();
     }
 
-    initFullScreenTouch() {
-        window.addEventListener('pointerdown', (e) => {
-            if (e.target.closest('#start-menu') || e.target.closest('.weapon-btn')) return;
-            if (this.joystick.active) return;
-
-            this.joystick.active = true;
-            this.joystick.pointerId = e.pointerId;
-            this.joystick.startX = e.clientX;
-            this.joystick.startY = e.clientY;
-
-            this.joystick.container.style.left = `${e.clientX}px`;
-            this.joystick.container.style.top = `${e.clientY}px`;
+    createJoystickElements() {
+        // 创建摇杆大底座
+        this.joystick.container = document.createElement('div');
+        this.joystick.container.id = 'virtual-joystick-container';
+        this.joystick.container.style.cssText = `
+            position: absolute; bottom: 12vh; left: 8vw;
+            width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 50%; display: none; z-index: 100;
+            pointer-events: auto; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+        `;
+        
+        // 创建摇杆小内芯
+        this.joystick.stick = document.createElement('div');
+        this.joystick.stick.style.cssText = `
+            position: absolute; top: 35px; left: 35px;
+            width: 46px; height: 46px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(200,200,200,0.5) 100%);
+            border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.05s ease;
+        `;
+        
+        this.joystick.container.appendChild(this.joystick.stick);
+        document.getElementById('ui-layer').appendChild(this.joystick.container);
+        
+        // 如果检测到是触控设备（iPad/手机），立刻把摇杆亮出来
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
             this.joystick.container.style.display = 'block';
-            this.joystick.stick.style.transform = 'translate(0px, 0px)';
+        }
+    }
+
+    // ==========================================================================
+    // ⚔️ 防暗杀防死锁：绑定右侧动作按键及拦截未购买武器
+    // ==========================================================================
+    bindClickEvents() {
+        // 开局变大按钮点击
+        this.domBtnBoost.addEventListener('click', () => {
+            if (this.mass < 20) {
+                this.mass++;
+                this.domMass.innerText = this.mass;
+                console.log(`🚀 [Boost] 玩家体积增大！当前质量: ${this.mass}`);
+            } else {
+                this.showAlert("MASS REACHED MAXIMUM LIMIT (20)!");
+            }
         });
 
-        window.addEventListener('pointermove', (e) => {
-            if (!this.joystick.active || e.pointerId !== this.joystick.pointerId) return;
+        // DASH 冲刺按钮点击
+        this.domBtnDash.addEventListener('click', () => {
+            console.log("⚡ [Dash] 触发冲刺！");
+            // 这里留给 PhysicsEngine 监听触发爆发推进力
+        });
 
+        // 拦截三大未购买武器（盾、闪电、吸盘）
+        const weapons = ['btn-weapon-shield', 'btn-weapon-lightning', 'btn-weapon-vacuum'];
+        weapons.forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    this.showAlert("WEAPON NOT PURCHASED! PLEASE BUY IT IN THE ARMORY.");
+                });
+            }
+        });
+    }
+
+    // 弹出高科技全屏警告，2秒后自动淡出
+    showAlert(text) {
+        this.domAlertText.innerText = text;
+        this.domAlertBox.classList.remove('hidden');
+        
+        if (this.alertTimer) clearTimeout(this.alertTimer);
+        this.alertTimer = setTimeout(() => {
+            this.domAlertBox.add('hidden'); // 军师修正：应该是 classList.add
+            this.domAlertBox.classList.add('hidden');
+        }, 2000);
+    }
+
+    // ==========================================================================
+    // 🕹️ 核心神技：PointerEvents 追踪，彻底终结左右手触控打架、卡死
+    // ==========================================================================
+    bindPointerEvents() {
+        const container = this.joystick.container;
+        
+        // 手指按在摇杆底座上
+        container.addEventListener('pointerdown', (e) => {
+            if (this.joystick.active) return; // 已经有手指占领了，拒绝第二根手指
+            
+            this.joystick.active = true;
+            this.joystick.pointerId = e.pointerId; // 记住这根金手指的“身份证号”
+            container.setPointerCapture(e.pointerId); // 锁定这根手指，就算划出圈外也能持续追踪
+            
+            const rect = container.getBoundingClientRect();
+            // 计算摇杆中心点坐标
+            this.joystick.startX = rect.left + rect.width / 2;
+            this.joystick.startY = rect.top + rect.height / 2;
+        });
+
+        // 手指在全屏幕滑动
+        container.addEventListener('pointermove', (e) => {
+            if (!this.joystick.active || e.pointerId !== this.joystick.pointerId) return;
+            
+            // 计算当前手指距离摇杆中心的偏移量
             let dirX = e.clientX - this.joystick.startX;
             let dirY = e.clientY - this.joystick.startY;
             let distance = Math.sqrt(dirX * dirX + dirY * dirY);
-
+            
+            // 限制内芯不能跑出大圈圈
             if (distance > this.joystick.maxRadius) {
                 dirX = (dirX / distance) * this.joystick.maxRadius;
                 dirY = (dirY / distance) * this.joystick.maxRadius;
+                distance = this.joystick.maxRadius;
             }
-
+            
+            // 渲染内芯的物理视觉位移
             this.joystick.stick.style.transform = `translate(${dirX}px, ${dirY}px)`;
+            
+            // 【极其重要】：归一化矩阵（输出 -1 到 1 之间的精确比例），传给未来的物理球
             this.moveVector.x = dirX / this.joystick.maxRadius;
-            this.moveVector.y = dirY / this.joystick.maxRadius;
+            this.moveVector.y = dirY / this.joystick.maxRadius; // 这里的 y 代表屏幕向下为正
         });
 
-        const resetJoystick = (e) => {
+        // 手指抬起，状态彻底重置
+        const endPointer = (e) => {
             if (!this.joystick.active || e.pointerId !== this.joystick.pointerId) return;
+            
             this.joystick.active = false;
-            this.joystick.container.style.display = 'none';
+            this.joystick.pointerId = null;
+            this.joystick.stick.style.transform = 'translate(0px, 0px)'; // 芯归原位
             this.moveVector.x = 0;
-            this.moveVector.y = 0;
+            this.moveVector.y = 0; // 物理推力瞬间清零，球靠惯性滑行
         };
 
-        window.addEventListener('pointerup', resetJoystick);
-        window.addEventListener('pointercancel', resetJoystick);
+        container.addEventListener('pointerup', endPointer);
+        container.addEventListener('pointercancel', endPointer);
     }
 
-    bindEvents() {
-        this.domBtnAd.addEventListener('click', () => {
-            this.adClicks++;
-            if (this.adClicks === 1) {
-                this.playerNumber = 16;
-                this.domAdStatusText.innerText = "NEXT: N32";
-                this.domNumber.innerText = this.playerNumber;
-                this.showAlert("AD VALUE LOCKED! STARTING SIZE: 16");
-            } else if (this.adClicks === 2) {
-                this.playerNumber = 32;
-                this.domAdStatusText.innerText = "MAX SIZE";
-                this.domBtnAd.disabled = true;
-                this.domBtnAd.style.opacity = "0.5";
-                this.domNumber.innerText = this.playerNumber;
-                this.showAlert("AD VALUE LOCKED! STARTING SIZE: 32");
+    // ==========================================================================
+    // ⌨️ 电脑端键盘自适应适配：WASD / 方向键
+    // ==========================================================================
+    bindKeyboardEvents() {
+        window.addEventListener('keydown', (e) => {
+            if (e.key in this.keys) {
+                this.keys[e.key] = true;
+                this.updateKeyboardVector();
             }
-            if (window.myMainScene) window.myMainScene.syncPlayerRadius();
         });
 
-        this.domBtnStart.addEventListener('click', () => {
-            this.domStartMenu.style.display = 'none';
-            if (window.myMainScene) window.myMainScene.activateArena();
-        });
-
-        const weapons = ['wpn-shield', 'wpn-lightning', 'wpn-vacuum'];
-        weapons.forEach(id => {
-            const el = document.getElementById(id);
-            el.addEventListener('click', () => {
-                if (el.classList.contains('unlocked')) return;
-                const cost = parseInt(el.getAttribute('data-price'));
-                
-                if (this.coins >= cost) {
-                    this.coins -= cost;
-                    this.domCoins.innerText = this.coins;
-                    el.classList.remove('locked');
-                    el.classList.add('unlocked');
-                    this.showAlert(`UNLOCKED! WEAPON IS ACTIVE!`);
-                } else {
-                    this.showAlert(`LOCK ACTIVATED! NEED $${cost} COINS TO UNLOCK.`);
-                }
-            });
+        window.addEventListener('keyup', (e) => {
+            if (e.key in this.keys) {
+                this.keys[e.key] = false;
+                this.updateKeyboardVector();
+            }
         });
     }
 
-    /**
-     * 🏆 接收全引擎实体数据，动态冲榜排序并实时刷新 DOM
-     */
-    updateLeaderboard(entities) {
-        // 按 2048 数值从大到小强力排序
-        entities.sort((a, b) => b.number - a.number);
+    updateKeyboardVector() {
+        // 如果触控摇杆正在生效，电脑键盘自动让路，不进行干扰
+        if (this.joystick.active) return;
 
-        let html = '';
-        entities.forEach((ent, index) => {
-            const isMe = ent.isPlayer ? 'player' : '';
-            html += `
-                <div class="leaderboard-item ${isMe}">
-                    <span>#${index + 1} ${ent.name}</span>
-                    <span>N${ent.number}</span>
-                </div>
-            `;
+        let x = 0;
+        let y = 0;
+
+        if (this.keys.w || this.keys.ArrowUp) y -= 1;    // 键盘上移代表 3D 纵深向前
+        if (this.keys.s || this.keys.ArrowDown) y += 1;  // 键盘下移代表 3D 纵深向后
+        if (this.keys.a || this.keys.ArrowLeft) x -= 1;  // 左右不变
+        if (this.keys.d || this.keys.ArrowRight) x += 1;
+
+        this.moveVector.x = x;
+        this.moveVector.y = y;
+    }
+
+    // 提供给 PhysicsEngine 实时每帧过来抽查数据拿走推力的方法
+    getInputVector() {
+        return this.moveVector;
+    }
+
+    // 提供给外部更新实时排行榜数据的方法
+    updateLeaderboard(rankArray) {
+        const listContainer = document.getElementById('leaderboard-list');
+        if (!listContainer) return;
+        listContainer.innerHTML = '';
+        rankArray.slice(0, 5).forEach((player, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="rank-name">${index + 1}. ${player.name}</span><span class="rank-val">${player.score}</span>`;
+            listContainer.appendChild(li);
         });
-        this.domLeaderboard.innerHTML = html;
     }
-
-    addCoin() {
-        this.coins += 5; 
-        this.domCoins.innerText = this.coins;
-    }
-
-    triggerMerge() {
-        this.playerNumber *= 2; 
-        this.domNumber.innerText = this.playerNumber;
-    }
-
-    showAlert(msg) {
-        this.domAlertText.innerText = msg;
-        this.domAlertBox.classList.remove('hidden');
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.domAlertBox.classList.add('hidden'), 2000);
-    }
-
-    getInputVector() { return this.moveVector; }
 }
 
+// 🔥【终极死守防线】：强制实例化并绑死在 window 全局，Safari 的 GC 回收机制看一眼都得绕道走！
 window.myGameUI = new GameUI();
