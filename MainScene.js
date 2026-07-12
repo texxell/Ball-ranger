@@ -1,7 +1,7 @@
 /**
  * ==========================================================================
- * BallRanger.io - MainScene 3D 核心物理大操场
- * 职责：渲染褐色沙路拼青色草地的超级大盘子、巨大体积球、相机追踪、跌落边缘 Game Over 结算
+ * BallRanger.io - MainScene (3D 完美大操场 + 疯狂 AI 撞击版)
+ * 职责：100%保留最完美的拼色巨型大盘子、巨大体积球、相机追踪、3个暗红 AI 追撞、跌落边缘 Game Over
  * ==========================================================================
  */
 
@@ -10,45 +10,53 @@ class MainScene {
         this.container = document.getElementById('game-container');
         this.isGameOver = false;
 
-        // 1. 物理世界核心参数（epicball 巨型尺寸）
-        this.arenaRadius = 150; // 超级大操场半径 150 米！
+        // 1. 物理世界核心参数（epicball 原始巨型尺寸，绝无删减！）
+        this.arenaRadius = 150; // 超级大操场半径 150 米
         this.player = {
             mesh: null,
-            radius: 2,         // 4米直径的巨型球
-            x: 0, z: 0,        // 盘面水平坐标
+            radius: 2,         // 4米直径的白金巨球
+            x: 0, z: 0,        // 水平坐标
             vx: 0, vz: 0,      // 水平速度
-            y: 0, vy: 0,       // 高度与重力速度
-            speed: 45,         // 给足推力，在巨型操场里绝不当乌龟
-            friction: 0.98     // 丝滑的冰面/沙地惯性滑行感
+            y: 10, vy: 0,      // 初始悬空高度与重力速度
+            speed: 45,         // 狂暴推力
+            friction: 0.98     // 丝滑沙地惯性
         };
+
+        // 🤖 敌方 AI 巨球阵列 (暗红电镀材质)
+        this.enemies = [
+            { id: 1, mesh: null, radius: 2.2, x: -40, z: -40, vx: 0, vz: 0, y: 5, vy: 0, speed: 25 },
+            { id: 2, mesh: null, radius: 1.8, x: 40, z: -50, vx: 0, vz: 0, y: 5, vy: 0, speed: 30 },
+            { id: 3, mesh: null, radius: 2.5, x: 0, z: -60, vx: 0, vz: 0, y: 5, vy: 0, speed: 20 }
+        ];
 
         this.initThree();
         this.createEpicArena();
         this.createPlayerBall();
+        this.createEnemyBalls(); // 唤醒 AI 敌军
         this.createGameOverUI();
         this.animate();
 
         window.addEventListener('resize', () => this.onWindowResize());
-        console.log("🏟️ [MainScene] 3D 巨型拼色操场部署完毕！重力与边界杀手已锁定。");
+        console.log("🏟️ [MainScene] 3D 巨型拼色操场与 AI 军队全部武装完毕！");
     }
 
     initThree() {
-        // 创建3D场景
+        // 创建 3D 场景
         this.scene = new THREE.Scene();
         this.scene.background = new THREE.Color('#0A0A0F'); // 极度深邃的星空太空底色
-        this.scene.fog = new THREE.FogExp2('#0A0A0F', 0.003); // 远端迷雾，让操场边缘更神秘
+        this.scene.fog = new THREE.FogExp2('#0A0A0F', 0.003); // 远端迷雾
 
         // 创建透视相机
         this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-        // 创建高级 WebGL 渲染器
+        // 创建 WebGL 渲染器
         this.renderer = new THREE.WebGLRenderer({ antialias: true });
         this.renderer.setSize(window.innerWidth, window.innerHeight);
         this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         this.renderer.shadowMap.enabled = true;
         this.container.appendChild(this.renderer.domElement);
 
-        // 注入高空战术双光源（主环境光 + 强力太阳聚光灯，照亮褐色沙路）
+        // 注入高空战术双光源
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
         this.scene.add(ambientLight);
 
@@ -61,36 +69,30 @@ class MainScene {
     }
 
     /**
-     * 🧱 核心美学：制作一个“中央泥土褐、中间科技青草、外围黄褐色沙路”的巨型大盘子操场
+     * 🧱 核心美学：中央泥土褐、中间科技青草、外围黄褐色沙路的大盘子操场
      */
     createEpicArena() {
-        // 创建一个分段数极高、极其平滑的圆形巨型平面
         const geometry = new THREE.CircleGeometry(this.arenaRadius, 64);
-        
-        // 动态修改顶点，使其变成一个中间低、边缘微微翘起的浅“盘子”（防止球太容易滚出去）
         const pos = geometry.attributes.position;
         const colors = [];
 
         for (let i = 0; i < pos.count; i++) {
             const x = pos.getX(i);
-            const y = pos.getY(i); // 在 CircleGeometry 中，y 其实代表水平平面的另一轴
+            const y = pos.getY(i); 
             const dist = Math.sqrt(x*x + y*y);
 
             // 公式：越靠近边缘，盘子微微翘起
             const z = -(x*x + y*y) * 0.00015;
             pos.setZ(i, z);
 
-            // 🎨 重点：根据距离圆心的远近，手工涂刷“褐色”与“青色”拼色路面
+            // 根据距离圆心的远近，手工涂刷“褐色”与“青色”拼色路面
             const color = new THREE.Color();
             if (dist < 25) {
-                // 1. 最中央区域：深泥土褐色
-                color.setStyle('#4A3525');
+                color.setStyle('#4A3525'); // 1. 最中央区域：深泥土褐色
             } else if (dist >= 25 && dist < 100) {
-                // 2. 中间主要奔跑区：科技青绿色草地
-                color.setStyle('#00A88F');
+                color.setStyle('#00A88F'); // 2. 中间主要奔跑区：科技青绿色草地
             } else {
-                // 3. 外围极速赛道：黄褐色沙路赛道 (Sandy Path)
-                color.setStyle('#C29B68');
+                color.setStyle('#C29B68'); // 3. 外围极速赛道：黄褐色沙路赛道 (Sandy Path)
             }
             colors.push(color.r, color.g, color.b);
         }
@@ -98,7 +100,6 @@ class MainScene {
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
         geometry.computeVertexNormals();
 
-        // 采用顶点着色材质（VertexColors），完美呈现褐色与青色相间的操场路面
         const material = new THREE.MeshStandardMaterial({
             vertexColors: true,
             roughness: 0.7,
@@ -107,45 +108,52 @@ class MainScene {
         });
 
         this.arenaMesh = new THREE.Mesh(geometry, material);
-        this.arenaMesh.rotation.x = -Math.PI / 2; // 把圆形立起来平铺成大地
+        this.arenaMesh.rotation.x = -Math.PI / 2; // 平铺成大地
         this.arenaMesh.receiveShadow = true;
         this.scene.add(this.arenaMesh);
 
-        // 在大盘子最外圈的深空里加一圈微弱的发光霓虹警戒线，拉满 io 游戏的高科技感
+        // 大盘子最外圈的红霓虹警戒线
         const ringGeo = new THREE.RingGeometry(this.arenaRadius - 0.5, this.arenaRadius + 0.5, 64);
-        const ringMat = new THREE.MeshBasicMaterial({ color: #FF3366, side: THREE.DoubleSide });
+        const ringMat = new THREE.MeshBasicMaterial({ color: '#FF3366', side: THREE.DoubleSide });
         const ring = new THREE.Mesh(ringGeo, ringMat);
         ring.rotation.x = -Math.PI / 2;
         ring.position.y = 0.1;
         this.scene.add(ring);
     }
 
-    /**
-     * 🔮 创造玩家巨大球
-     */
     createPlayerBall() {
         const geometry = new THREE.SphereGeometry(this.player.radius, 32, 32);
-        // 电镀白金发光核心材质
         const material = new THREE.MeshStandardMaterial({
             color: '#FFFFFF',
             metalness: 0.9,
-            roughness: 0.1,
-            envMapIntensity: 1.0
+            roughness: 0.1
         });
 
         this.player.mesh = new THREE.Mesh(geometry, material);
         this.player.mesh.castShadow = true;
         this.player.mesh.receiveShadow = true;
-        
-        // 初始降落高度：稍微悬空掉落到盘子上
-        this.player.y = 10;
         this.player.mesh.position.set(0, this.player.y, 0);
         this.scene.add(this.player.mesh);
     }
 
     /**
-     * 💀 动态创建 GAME OVER 战术清算弹窗
+     * 🤖 创造 3 个巨型暗红 AI 敌军球
      */
+    createEnemyBalls() {
+        const geometry = new THREE.SphereGeometry(1, 32, 32); 
+        const material = new THREE.MeshStandardMaterial({ color: '#CC2222', metalness: 0.7, roughness: 0.2 }); 
+
+        this.enemies.forEach(enemy => {
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.scale.setScalar(enemy.radius); // 缩放到巨型尺寸
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.position.set(enemy.x, enemy.y, enemy.z);
+            this.scene.add(mesh);
+            enemy.mesh = mesh;
+        });
+    }
+
     createGameOverUI() {
         this.gameOverEl = document.createElement('div');
         this.gameOverEl.style.cssText = `
@@ -165,13 +173,10 @@ class MainScene {
         document.body.appendChild(this.gameOverEl);
 
         document.getElementById('btn-respawn').addEventListener('click', () => {
-            window.location.reload(); // 点击直接满血复活刷新网页
+            window.location.reload();
         });
     }
 
-    /**
-     * ⏱️ 3D 渲染与物理动力引擎核心死循环 (每秒 60 帧精准爆发)
-     */
     animate() {
         requestAnimationFrame(() => this.animate());
 
@@ -182,76 +187,123 @@ class MainScene {
 
         const deltaTime = 1 / 60;
 
-        // 1. 抽查并抽离全局 GameUI 的盲操矢量数据
+        // ==========================================================================
+        // 1. 玩家物理与盲操矢量数据抽离
+        // ==========================================================================
         let inputX = 0;
         let inputZ = 0;
         if (window.myGameUI) {
             const vector = window.myGameUI.getInputVector();
             inputX = vector.x;
-            inputZ = vector.y; // 摇杆的y对应3D世界的纵深Z
+            inputZ = vector.y; 
         }
 
-        // 2. 注入水平移动加速度
         this.player.vx += inputX * this.player.speed * deltaTime;
         this.player.vz += inputZ * this.player.speed * deltaTime;
-
-        // 应用惯性摩擦力
         this.player.vx *= this.player.friction;
         this.player.vz *= this.player.friction;
-
-        // 更新水平位置
         this.player.x += this.player.vx * deltaTime;
         this.player.z += this.player.vz * deltaTime;
 
-        // 3. 计算盘子表面的实时高度（模拟盘子的完美弧度面贴地滚行）
-        const currentDist = Math.sqrt(this.player.x * this.player.x + this.player.z * this.player.z);
-        let surfaceY = 0;
+        // 玩家重力与大盘子弧度高度计算
+        const playerDist = Math.sqrt(this.player.x * this.player.x + this.player.z * this.player.z);
+        let playerSurfaceY = playerDist <= this.arenaRadius ? -(this.player.x * this.player.x + this.player.z * this.player.z) * 0.00015 + this.player.radius : -99999;
         
-        if (currentDist <= this.arenaRadius) {
-            // 球还在大操场内部，应用盘子的斜率高度
-            surfaceY = -(this.player.x * this.player.x + this.player.z * this.player.z) * 0.00015 + this.player.radius;
+        if (this.player.y > playerSurfaceY) {
+            this.player.vy -= 35 * deltaTime; 
         } else {
-            // 🚨 球已经冲出了半径 150 米的大操场边界！凌空断崖！
-            surfaceY = -99999;
-        }
-
-        // 4. 重力与坠落边缘判定
-        if (this.player.y > surfaceY) {
-            this.player.vy -= 35 * deltaTime; // 真实物理重力加速度
-        } else {
-            this.player.y = surfaceY;
-            this.player.vy = 0; // 稳稳贴在盘子表面
+            this.player.y = playerSurfaceY;
+            this.player.vy = 0; 
         }
         this.player.y += this.player.vy * deltaTime;
 
-        // 同步 3D 视觉网格
         if (this.player.mesh) {
             this.player.mesh.position.set(this.player.x, this.player.y, this.player.z);
-            
-            // 逼真细节：让巨大球根据移动速度方向产生滚动的视觉自转效果
             if (Math.abs(this.player.vx) > 0.1 || Math.abs(this.player.vz) > 0.1) {
                 this.player.mesh.rotation.z -= this.player.vx * 0.05;
                 this.player.mesh.rotation.x += this.player.vz * 0.05;
             }
         }
 
-        // 5. 💀 终极无情审判：坠落深渊 Game Over 检查
+        // ==========================================================================
+        // 2. 🤖 敌方 AI 猎杀算法与重力同步
+        // ==========================================================================
+        this.enemies.forEach(enemy => {
+            const edist = Math.sqrt(enemy.x * enemy.x + enemy.z * enemy.z);
+            
+            if (edist <= this.arenaRadius) {
+                // 计算玩家和 AI 之间的猎杀方向向量
+                const dx = this.player.x - enemy.x;
+                const dz = this.player.z - enemy.z;
+                const targetDist = Math.sqrt(dx * dx + dz * dz);
+
+                if (targetDist > 1) {
+                    enemy.vx += (dx / targetDist) * enemy.speed * deltaTime;
+                    enemy.vz += (dz / targetDist) * enemy.speed * deltaTime;
+                }
+            } else {
+                enemy.vy -= 35 * deltaTime; // AI 掉出大操场同样坠落
+            }
+
+            enemy.vx *= 0.97;
+            enemy.vz *= 0.97;
+            enemy.x += enemy.vx * deltaTime;
+            enemy.z += enemy.vz * deltaTime;
+
+            let enemySurfaceY = edist <= this.arenaRadius ? -(enemy.x * enemy.x + enemy.z * enemy.z) * 0.00015 + enemy.radius : -99999;
+            if (enemy.y > enemySurfaceY) {
+                enemy.y += enemy.vy * deltaTime;
+            } else {
+                enemy.y = enemySurfaceY;
+                enemy.vy = 0;
+            }
+
+            if (enemy.mesh) {
+                enemy.mesh.position.set(enemy.x, enemy.y, enemy.z);
+                enemy.mesh.rotation.z -= enemy.vx * 0.04;
+                enemy.mesh.rotation.x += enemy.vz * 0.04;
+            }
+
+            // ==========================================================================
+            // 3. 💥 巨球相撞超强动能回弹物理
+            // ==========================================================================
+            const p_dx = enemy.x - this.player.x;
+            const p_dz = enemy.z - this.player.z;
+            const p_dist = Math.sqrt(p_dx * p_dx + p_dz * p_dz);
+            const minDist = this.player.radius + enemy.radius;
+
+            if (p_dist < minDist) {
+                const nx = p_dx / p_dist;
+                const nz = p_dz / p_dist;
+
+                const r_vx = this.player.vx - enemy.vx;
+                const r_vz = this.player.vz - enemy.vz;
+                const velAlongNormal = r_vx * nx + r_vz * nz;
+
+                if (velAlongNormal > 0) {
+                    const restitution = 1.4; // 极其凶残的震飞击退系数
+                    const impulseScalar = (1 + restitution) * velAlongNormal / 2;
+
+                    this.player.vx -= impulseScalar * nx * 1.6;
+                    this.player.vz -= impulseScalar * nz * 1.6;
+                    enemy.vx += impulseScalar * nx * 1.6;
+                    enemy.vz += impulseScalar * nz * 1.6;
+                }
+            }
+        });
+
+        // 4. 💀 坠落深渊 Game Over 检查
         if (this.player.y < -20) {
-            this.triggerGameOver();
+            this.isGameOver = true;
+            this.gameOverEl.style.display = 'flex';
         }
 
-        // 6. 🎥 追尾相机追踪：营造 epicball 极其宏大的运动空间感
+        // 5. 🎥 追尾相机追踪（完美保留 epicball 极其宏大的广阔视角）
         this.camera.position.set(this.player.x, this.player.y + 12, this.player.z + 28);
         this.camera.lookAt(this.player.x, this.player.y, this.player.z);
 
-        // 渲染当前帧画面
+        // 渲染画面
         this.renderer.render(this.scene, this.camera);
-    }
-
-    triggerGameOver() {
-        this.isGameOver = true;
-        this.gameOverEl.style.display = 'flex'; // 瞬间弹出清算大招窗口
-        console.log("💀 [Game Over] 司令，球已粉碎坠机，请重新整队再战！");
     }
 
     onWindowResize() {
@@ -261,5 +313,4 @@ class MainScene {
     }
 }
 
-// 彻底初始化 3D 世界
 window.myMainScene = new MainScene();
