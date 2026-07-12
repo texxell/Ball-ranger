@@ -2,182 +2,90 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>BallRanger.io - 3D Mega Bowl</title>
-    <style>
-        * {
-            box-sizing: border-box;
-            user-select: none;
-            -webkit-user-select: none;
-            touch-action: none;
-        }
-        body, html {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; background-color: #0A0A0F;
-            font-family: Arial, sans-serif;
-        }
-
-        #game-container {
-            width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
-        }
-
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 10; pointer-events: none;
-        }
-        .interactive { pointer-events: auto; }
-
-        /* 📊 局内顶部战术看板 */
-        .top-bar {
-            position: absolute; top: 20px; left: 20px;
-            display: flex; gap: 20px; align-items: center;
-        }
-        .stats-box {
-            background: rgba(20, 20, 35, 0.8); backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px;
-            padding: 10px 20px; color: #FFF; font-weight: bold; font-size: 18px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); display: flex; gap: 20px;
-        }
-        .stat-item span { color: #00FFCC; }
-
-        /* 🏆 右上角实时乱斗排行榜 */
-        .leaderboard-box {
-            position: absolute; top: 20px; right: 20px;
-            background: rgba(15, 15, 25, 0.85); backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px;
-            padding: 15px; width: 220px; color: #FFF;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-        }
-        .leaderboard-title {
-            font-size: 14px; font-weight: 900; color: #FFB300;
-            margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
-            padding-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;
-        }
-        .leaderboard-list {
-            display: flex; flex-direction: column; gap: 6px; font-size: 12px;
-        }
-        .leaderboard-item {
-            display: flex; justify-content: space-between; align-items: center;
-        }
-        .leaderboard-item.player { color: #00FFCC; font-weight: bold; }
-
-        /* ⚔️ 右侧独立武器控制区 */
-        .weapon-sidebar {
-            position: absolute; right: 20px; top: 55%; transform: translateY(-50%);
-            display: flex; flex-direction: column; gap: 15px;
-        }
-        .weapon-btn {
-            width: 75px; height: 75px; background: rgba(15, 15, 25, 0.9);
-            border: 2px solid #555; border-radius: 16px; display: flex;
-            flex-direction: column; align-items: center; justify-content: center;
-            color: #FFF; position: relative; cursor: pointer; transition: all 0.2s;
-        }
-        .weapon-btn.locked { border-color: #FF3366; background: rgba(40, 15, 20, 0.95); }
-        .weapon-btn .lock-icon { font-size: 18px; color: #FF3366; }
-        .weapon-btn .price-tag { font-size: 11px; color: #FFB300; margin-top: 2px; font-weight: bold; }
-        .weapon-btn .weapon-name { font-size: 10px; color: #AAA; }
-        .weapon-btn.unlocked { border-color: #00FFCC; background: rgba(15, 40, 30, 0.95); }
-        .weapon-btn.unlocked .lock-icon { display: none; }
-        .weapon-btn.unlocked .price-tag { color: #00FFCC; }
-
-        /* 城堡大厅开局菜单 */
-        #start-menu {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(10, 10, 15, 0.65); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-            z-index: 100; display: flex; justify-content: center; align-items: center;
-        }
-        .menu-card {
-            background: rgba(25, 25, 40, 0.9); border: 2px solid rgba(255, 255, 255, 0.08);
-            border-radius: 24px; padding: 40px; width: 90%; max-width: 450px;
-            text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.6); color: #FFF;
-        }
-        .menu-title { font-size: 36px; font-weight: 900; color: #FFF; margin: 0 0 5px 0; text-shadow: 0 0 15px rgba(0,255,204,0.3); }
-        .menu-subtitle { font-size: 13px; color: #888; margin-bottom: 35px; text-transform: uppercase; }
-        
-        .btn-main {
-            width: 100%; padding: 16px; font-size: 22px; font-weight: 900;
-            background: linear-gradient(135deg, #00FFCC 0%, #00A88F 100%);
-            border: none; border-radius: 14px; color: #0A0A0F; cursor: pointer;
-            box-shadow: 0 6px 20px rgba(0,255,204,0.4); margin-bottom: 20px;
-        }
-        .btn-ad {
-            width: 100%; padding: 12px; font-size: 14px; font-weight: bold;
-            background: rgba(255, 179, 0, 0.15); border: 1px solid #FFB300;
-            border-radius: 12px; color: #FFB300; cursor: pointer;
-            display: flex; align-items: center; justify-content: center; gap: 8px;
-        }
-        .btn-ad .badge { background: #FFB300; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
-
-        #alert-msg-box {
-            position: absolute; top: 110px; left: 50%; transform: translateX(-50%);
-            background: rgba(255, 51, 102, 0.95); color: white; padding: 12px 25px;
-            border-radius: 8px; font-weight: bold; font-size: 14px; z-index: 1000;
-            box-shadow: 0 5px 15px rgba(255,51,102,0.4); transition: opacity 0.2s;
-        }
-        .hidden { display: none !important; }
-    </style>
-    
-    <!-- 加载核心引擎 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- 确保在手机、iPad 上不缩放、不拉伸，100% 视口对齐 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>BallRanger.io</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
+    <!-- 3D 渲染核心容器：Three.js 画面会强行撑满这里，绝对不再是 0 像素隐形盒子 -->
     <div id="game-container"></div>
 
+    <!-- 游戏局内高级 UI 顶层：采用苹果风白金磨砂玻璃风格 -->
     <div id="ui-layer">
-        <!-- 📊 顶部数据看板 -->
+        
+        <!-- 顶部状态栏：金币、当前质量、开局变大按钮 -->
         <div class="top-bar">
-            <div class="stats-box">
-                <div class="stat-item">GOLD: $<span id="ui-coins">0</span></div>
-                <div class="stat-item">NUMBER: <span id="ui-number">2</span></div>
+            <div class="stat-box">
+                <span class="label">COINS:</span>
+                <span id="ui-coins" class="value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="label">MASS:</span>
+                <span id="ui-mass" class="value">2</span>
+            </div>
+            <!-- 开局看广告变大按钮，上限20 -->
+            <button id="btn-boost" class="boost-btn">BOOST MASS (Max 20)</button>
+        </div>
+
+        <!-- 右上角实时 Top 5 排行榜：手机端会自动折叠成一个小皇冠图标 -->
+        <div id="leaderboard-wrapper" class="leaderboard-card">
+            <div class="leaderboard-header">
+                <span class="crown-icon">👑</span>
+                <h3 class="leaderboard-title">TOP 5 RANGERS</h3>
+            </div>
+            <ol id="leaderboard-list">
+                <li><span class="rank-name">1. Player_1</span><span class="rank-val">99</span></li>
+                <li><span class="rank-name">2. AI_Alpha</span><span class="rank-val">50</span></li>
+                <li><span class="rank-name">3. AI_Beta</span><span class="rank-val">24</span></li>
+                <li><span class="rank-name">4. AI_Gamma</span><span class="rank-val">12</span></li>
+                <li><span class="rank-name">5. AI_Delta</span><span class="rank-val">4</span></li>
+            </ol>
+        </div>
+
+        <!-- 屏幕中央高级高科技提示弹窗：默认隐藏，未购买武器乱按时会闪烁弹出 -->
+        <div id="alert-msg-box" class="alert-overlay hidden">
+            <div class="alert-content">
+                <span class="alert-icon">⚠️</span>
+                <p id="alert-text">WEAPON NOT PURCHASED! PLEASE BUY IT IN THE ARMORY.</p>
             </div>
         </div>
 
-        <!-- 🏆 右上角实时乱斗排行榜 -->
-        <div class="leaderboard-box">
-            <div class="leaderboard-title">🏆 Arena Leaderboard</div>
-            <div id="ui-leaderboard" class="leaderboard-list">
-                <!-- 动态刷新排位 -->
-            </div>
+        <!-- 右下角战术技能操作区：DASH 冲刺与三大永久武器子弹栏 -->
+        <!-- 军师防避雷：用独立的容器包装，按钮间距靠 flex 挤开，捕获区绝对不重叠死锁 -->
+        <div class="action-controls-zone">
+            <!-- 默认人人都有的 DASH 冲刺键 -->
+            <button id="btn-dash" class="ctrl-btn dash-btn">
+                <span class="btn-text">DASH</span>
+                <span class="btn-sub">CD 30s</span>
+            </button>
+            
+            <!-- 护盾：局内带锁效果示例 (🔒 x5) -->
+            <button id="btn-weapon-shield" class="ctrl-btn weapon-btn locked">
+                <span class="btn-text">🛡️ SHIELD</span>
+                <span id="ammo-shield" class="btn-sub">🔒 x1</span>
+            </button>
+
+            <!-- 闪电 -->
+            <button id="btn-weapon-lightning" class="ctrl-btn weapon-btn locked">
+                <span class="btn-text">⚡ LIGHTNING</span>
+                <span id="ammo-lightning" class="btn-sub">🔒 x0</span>
+            </button>
+
+            <!-- 吸盘 -->
+            <button id="btn-weapon-vacuum" class="ctrl-btn weapon-btn locked">
+                <span class="btn-text">🧲 VACUUM</span>
+                <span id="ammo-vacuum" class="btn-sub">🔒 x0</span>
+            </button>
         </div>
 
-        <!-- ⚔️ 右侧武器控制 -->
-        <div class="weapon-sidebar interactive">
-            <div id="wpn-shield" class="weapon-btn locked" data-price="50">
-                <span class="lock-icon">🔒</span>
-                <span class="weapon-name">SHIELD</span>
-                <span class="price-tag">$50</span>
-            </div>
-            <div id="wpn-lightning" class="weapon-btn locked" data-price="100">
-                <span class="lock-icon">🔒</span>
-                <span class="weapon-name">LIGHTNING</span>
-                <span class="price-tag">$100</span>
-            </div>
-            <div id="wpn-vacuum" class="weapon-btn locked" data-price="200">
-                <span class="lock-icon">🔒</span>
-                <span class="weapon-name">VACUUM</span>
-                <span class="price-tag">$200</span>
-            </div>
-        </div>
-
-        <!-- 🏰 战术大厅开局菜单 -->
-        <div id="start-menu" class="interactive">
-            <div class="menu-card">
-                <h1 class="menu-title">BALL RANGER 3D</h1>
-                <div class="menu-subtitle">Mega Bowl 2048 Arena</div>
-                <button id="btn-start-game" class="btn-main">START GAME</button>
-                <button id="btn-watch-ad" class="btn-ad">
-                    📺 WATCH AD FOR MEGA SIZE <span id="ad-status-text" class="badge">NEXT: N16</span>
-                </button>
-            </div>
-        </div>
-
-        <div id="alert-msg-box" class="hidden">
-            <span id="alert-text">ALERT</span>
-        </div>
     </div>
 
-    <script type="module" src="GameUI.js"></script>
+    <!-- 严格使用严格、安全的 HTTPS CDN 引入 Three.js 核心底层 3D 库，确保 iPad Safari 绝对绿灯通行 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- 主程序入口，采用 ES6 模块机制，后续会去拉取其他逻辑文件 -->
     <script type="module" src="MainScene.js"></script>
 </body>
 </html>
