@@ -2,44 +2,90 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <!-- 确保在手机、iPad 上不缩放、不拉伸，100% 视口对齐 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>BallRanger.io</title>
-    
-    <!-- 🚨 核心命脉：必须在所有人之前，先把 Three.js 核心库拉进来！ -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <style>
-        /* 这里的 CSS 保持不变 ... */
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- 你的大厅 HTML 结构保持不变 ... -->
+    <!-- 3D 渲染核心容器：Three.js 画面会强行撑满这里，绝对不再是 0 像素隐形盒子 -->
+    <div id="game-container"></div>
 
-    <!-- 🚨 终极总装启动器：此时 THREE 已经是全局变量，绝对不会再报 undefined 导致死黑 -->
-    <script type="module">
-        import { GameUI } from './GameUI.js';
-        import { Game3D } from './Game3D.js';
-        import { GameShop } from './GameShop.js';
+    <!-- 游戏局内高级 UI 顶层：采用苹果风白金磨砂玻璃风格 -->
+    <div id="ui-layer">
+        
+        <!-- 顶部状态栏：金币、当前质量、开局变大按钮 -->
+        <div class="top-bar">
+            <div class="stat-box">
+                <span class="label">COINS:</span>
+                <span id="ui-coins" class="value">0</span>
+            </div>
+            <div class="stat-box">
+                <span class="label">MASS:</span>
+                <span id="ui-mass" class="value">2</span>
+            </div>
+            <!-- 开局看广告变大按钮，上限20 -->
+            <button id="btn-boost" class="boost-btn">BOOST MASS (Max 20)</button>
+        </div>
 
-        window.addEventListener('DOMContentLoaded', () => {
-            try {
-                // 检查 Three.js 是否真的活了
-                if (typeof THREE === 'undefined') {
-                    alert("Three.js 核心库加载失败！请检查网络或 CDN 链接！");
-                    return;
-                }
+        <!-- 右上角实时 Top 5 排行榜：手机端会自动折叠成一个小皇冠图标 -->
+        <div id="leaderboard-wrapper" class="leaderboard-card">
+            <div class="leaderboard-header">
+                <span class="crown-icon">👑</span>
+                <h3 class="leaderboard-title">TOP 5 RANGERS</h3>
+            </div>
+            <ol id="leaderboard-list">
+                <li><span class="rank-name">1. Player_1</span><span class="rank-val">99</span></li>
+                <li><span class="rank-name">2. AI_Alpha</span><span class="rank-val">50</span></li>
+                <li><span class="rank-name">3. AI_Beta</span><span class="rank-val">24</span></li>
+                <li><span class="rank-name">4. AI_Gamma</span><span class="rank-val">12</span></li>
+                <li><span class="rank-name">5. AI_Delta</span><span class="rank-val">4</span></li>
+            </ol>
+        </div>
 
-                window.gameUI = new GameUI();
-                window.gameShop = new GameShop();
-                window.game3D = new Game3D();
-                
-                console.log("BallRanger.io 核心矩阵全案总装点火成功！");
-            } catch (error) {
-                // 如果还有任何隐蔽的脚本错误，直接弹窗抓人，绝不让它静默死黑！
-                alert("启动时发生内伤崩溃: " + error.message);
-            }
-        });
-    </script>
+        <!-- 屏幕中央高级高科技提示弹窗：默认隐藏，未购买武器乱按时会闪烁弹出 -->
+        <div id="alert-msg-box" class="alert-overlay hidden">
+            <div class="alert-content">
+                <span class="alert-icon">⚠️</span>
+                <p id="alert-text">WEAPON NOT PURCHASED! PLEASE BUY IT IN THE ARMORY.</p>
+            </div>
+        </div>
+
+        <!-- 右下角战术技能操作区：DASH 冲刺与三大永久武器子弹栏 -->
+        <!-- 军师防避雷：用独立的容器包装，按钮间距靠 flex 挤开，捕获区绝对不重叠死锁 -->
+        <div class="action-controls-zone">
+            <!-- 默认人人都有的 DASH 冲刺键 -->
+            <button id="btn-dash" class="ctrl-btn dash-btn">
+                <span class="btn-text">DASH</span>
+                <span class="btn-sub">CD 30s</span>
+            </button>
+            
+            <!-- 护盾：局内带锁效果示例 (🔒 x5) -->
+            <button id="btn-weapon-shield" class="ctrl-btn weapon-btn locked">
+                <span class="btn-text">🛡️ SHIELD</span>
+                <span id="ammo-shield" class="btn-sub">🔒 x1</span>
+            </button>
+
+            <!-- 闪电 -->
+            <button id="btn-weapon-lightning" class="ctrl-btn weapon-btn locked">
+                <span class="btn-text">⚡ LIGHTNING</span>
+                <span id="ammo-lightning" class="btn-sub">🔒 x0</span>
+            </button>
+
+            <!-- 吸盘 -->
+            <button id="btn-weapon-vacuum" class="ctrl-btn weapon-btn locked">
+                <span class="btn-text">🧲 VACUUM</span>
+                <span id="ammo-vacuum" class="btn-sub">🔒 x0</span>
+            </button>
+        </div>
+
+    </div>
+
+    <!-- 严格使用严格、安全的 HTTPS CDN 引入 Three.js 核心底层 3D 库，确保 iPad Safari 绝对绿灯通行 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- 主程序入口，采用 ES6 模块机制，后续会去拉取其他逻辑文件 -->
+    <script type="module" src="MainScene.js"></script>
 </body>
 </html>
