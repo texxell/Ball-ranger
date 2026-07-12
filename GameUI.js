@@ -1,21 +1,20 @@
 /**
  * ==========================================================================
- * GameUI.js - 核心全屏盲操与大厅状态管理器
- * 备注：管理金币流水、武器加锁安全审查、看广告倍化、全屏幕随处盲操划动控制
+ * GameUI.js - 全屏盲操、武器管理与实时排行榜渲染核心
+ * 备注：管理金币流水、看广告倍化、全屏幕盲操、同步刷新动态排位战力榜
  * ==========================================================================
  */
 export class GameUI {
     constructor() {
-        this.coins = 0;          // 局内初始金币
-        this.playerNumber = 2;    // 初始2048号码
-        this.adClicks = 0;        // 广告点击计数
+        this.coins = 0;          
+        this.playerNumber = 2;    
+        this.adClicks = 0;        
         
-        // 👑 全屏盲操核心状态向量
         this.moveVector = { x: 0, y: 0 }; 
         this.joystick = {
             active: false,
             pointerId: null,
-            startX: 0,            // 划动按下的屏幕任意位置为圆心
+            startX: 0,            
             startY: 0,
             maxRadius: 60,
             container: null,
@@ -23,7 +22,7 @@ export class GameUI {
         };
 
         this.cacheDOM();
-        this.initFullScreenTouch(); // 强力激活全屏盲操
+        this.initFullScreenTouch(); 
         this.bindEvents();
     }
 
@@ -36,6 +35,7 @@ export class GameUI {
         this.domAdStatusText = document.getElementById('ad-status-text');
         this.domAlertBox = document.getElementById('alert-msg-box');
         this.domAlertText = document.getElementById('alert-text');
+        this.domLeaderboard = document.getElementById('ui-leaderboard');
 
         // 动态生成屏幕随处可显的触控视觉手柄
         this.joystick.container = document.createElement('div');
@@ -53,19 +53,13 @@ export class GameUI {
         document.getElementById('ui-layer').appendChild(this.joystick.container);
     }
 
-    /**
-     * 👑 触控破产突破：全屏幕任何地点一划即可完美操纵球体
-     */
     initFullScreenTouch() {
         window.addEventListener('pointerdown', (e) => {
-            // 安全防御：如果点到大厅面板或者右边武器按钮，不允许触发盲操
             if (e.target.closest('#start-menu') || e.target.closest('.weapon-btn')) return;
             if (this.joystick.active) return;
 
             this.joystick.active = true;
             this.joystick.pointerId = e.pointerId;
-            
-            // 抓取全屏点击点作为临时圆心位置
             this.joystick.startX = e.clientX;
             this.joystick.startY = e.clientY;
 
@@ -88,8 +82,6 @@ export class GameUI {
             }
 
             this.joystick.stick.style.transform = `translate(${dirX}px, ${dirY}px)`;
-            
-            // 导出归一化物理控制向量
             this.moveVector.x = dirX / this.joystick.maxRadius;
             this.moveVector.y = dirY / this.joystick.maxRadius;
         });
@@ -107,7 +99,6 @@ export class GameUI {
     }
 
     bindEvents() {
-        // 📺 广告控制线：看广告第一次到16，第二次到32，未来对接平台广告API
         this.domBtnAd.addEventListener('click', () => {
             this.adClicks++;
             if (this.adClicks === 1) {
@@ -126,13 +117,11 @@ export class GameUI {
             if (window.myMainScene) window.myMainScene.syncPlayerRadius();
         });
 
-        // 点击开始游戏
         this.domBtnStart.addEventListener('click', () => {
             this.domStartMenu.style.display = 'none';
             if (window.myMainScene) window.myMainScene.activateArena();
         });
 
-        // ⚔️ 武器库扣款格杀逻辑：50, 100, 200 分别锁定
         const weapons = ['wpn-shield', 'wpn-lightning', 'wpn-vacuum'];
         weapons.forEach(id => {
             const el = document.getElementById(id);
@@ -140,7 +129,6 @@ export class GameUI {
                 if (el.classList.contains('unlocked')) return;
                 const cost = parseInt(el.getAttribute('data-price'));
                 
-                // 金币安全核算
                 if (this.coins >= cost) {
                     this.coins -= cost;
                     this.domCoins.innerText = this.coins;
@@ -154,13 +142,33 @@ export class GameUI {
         });
     }
 
+    /**
+     * 🏆 接收全引擎实体数据，动态冲榜排序并实时刷新 DOM
+     */
+    updateLeaderboard(entities) {
+        // 按 2048 数值从大到小强力排序
+        entities.sort((a, b) => b.number - a.number);
+
+        let html = '';
+        entities.forEach((ent, index) => {
+            const isMe = ent.isPlayer ? 'player' : '';
+            html += `
+                <div class="leaderboard-item ${isMe}">
+                    <span>#${index + 1} ${ent.name}</span>
+                    <span>N${ent.number}</span>
+                </div>
+            `;
+        });
+        this.domLeaderboard.innerHTML = html;
+    }
+
     addCoin() {
-        this.coins += 5; // 吃一个硬币得5块钱
+        this.coins += 5; 
         this.domCoins.innerText = this.coins;
     }
 
     triggerMerge() {
-        this.playerNumber *= 2; // 2048升级倍增
+        this.playerNumber *= 2; 
         this.domNumber.innerText = this.playerNumber;
     }
 
