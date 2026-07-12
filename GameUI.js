@@ -1,21 +1,21 @@
 /**
  * ==========================================================================
- * BallRanger.io - GameUI 战术全屏盲操与大厅系统
- * 职责：掌控全屏盲操矢量、金币购买武器、看广告16→32倍化变大、Game Over清算弹窗
+ * GameUI.js - 核心全屏盲操与大厅状态管理器
+ * 备注：管理金币流水、武器加锁安全审查、看广告倍化、全屏幕随处盲操划动控制
  * ==========================================================================
  */
 export class GameUI {
     constructor() {
-        this.coins = 0;         // 局内真实金币储备
-        this.playerNumber = 2;   // 2048 初始号码（默认2，广告可强化至16、32）
-        this.adClicks = 0;       // 广告点击计数器
+        this.coins = 0;          // 局内初始金币
+        this.playerNumber = 2;    // 初始2048号码
+        this.adClicks = 0;        // 广告点击计数
         
-        // 👑 核心升级：终极全屏盲操控制状态机
+        // 👑 全屏盲操核心状态向量
         this.moveVector = { x: 0, y: 0 }; 
         this.joystick = {
             active: false,
             pointerId: null,
-            startX: 0, // 手指在全屏“任意地方”按下去的那一刻，就是临时圆心
+            startX: 0,            // 划动按下的屏幕任意位置为圆心
             startY: 0,
             maxRadius: 60,
             container: null,
@@ -23,8 +23,8 @@ export class GameUI {
         };
 
         this.cacheDOM();
-        this.initFullScreenTouch(); // 唤醒全屏盲操
-        this.bindMenuAndWeapons();
+        this.initFullScreenTouch(); // 强力激活全屏盲操
+        this.bindEvents();
     }
 
     cacheDOM() {
@@ -37,49 +37,38 @@ export class GameUI {
         this.domAlertBox = document.getElementById('alert-msg-box');
         this.domAlertText = document.getElementById('alert-text');
 
-        this.createDynamicJoystick();
-    }
-
-    /**
-     * 🔮 动态盲操皮肤（平时彻底隐藏，在屏幕任意地方按下时瞬间浮现）
-     */
-    createDynamicJoystick() {
+        // 动态生成屏幕随处可显的触控视觉手柄
         this.joystick.container = document.createElement('div');
         this.joystick.container.style.cssText = `
             position: absolute; width: 120px; height: 120px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 2px solid rgba(0, 255, 204, 0.25);
-            border-radius: 50%; display: none; z-index: 99;
-            pointer-events: none; transform: translate(-50%, -50%);
-            box-shadow: 0 0 15px rgba(0,255,204,0.1);
+            background: rgba(255, 255, 255, 0.03); border: 2px solid rgba(0, 255, 204, 0.3);
+            border-radius: 50%; display: none; z-index: 99; pointer-events: none; transform: translate(-50%, -50%);
         `;
         this.joystick.stick = document.createElement('div');
         this.joystick.stick.style.cssText = `
             position: absolute; top: 37px; left: 37px; width: 46px; height: 46px;
-            background: linear-gradient(135deg, #00FFCC 0%, #00A88F 100%);
-            border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            background: linear-gradient(135deg, #00FFCC 0%, #00A88F 100%); border-radius: 50%;
         `;
         this.joystick.container.appendChild(this.joystick.stick);
         document.getElementById('ui-layer').appendChild(this.joystick.container);
     }
 
     /**
-     * 🕹️ 核心神技：全屏幕随处盲操划动（不限左右，全屏通吃）
+     * 👑 触控破产突破：全屏幕任何地点一划即可完美操纵球体
      */
     initFullScreenTouch() {
         window.addEventListener('pointerdown', (e) => {
-            // 避雷拦截：如果点到的是菜单、被锁的武器图标，不能触发摇杆
+            // 安全防御：如果点到大厅面板或者右边武器按钮，不允许触发盲操
             if (e.target.closest('#start-menu') || e.target.closest('.weapon-btn')) return;
-            if (this.joystick.active) return; // 拒绝多指干扰
+            if (this.joystick.active) return;
 
             this.joystick.active = true;
             this.joystick.pointerId = e.pointerId;
             
-            // 屏幕上的“任何位置”都是合法圆心！
+            // 抓取全屏点击点作为临时圆心位置
             this.joystick.startX = e.clientX;
             this.joystick.startY = e.clientY;
 
-            // 视觉跟随：将盲操中心圈移至手指点击处
             this.joystick.container.style.left = `${e.clientX}px`;
             this.joystick.container.style.top = `${e.clientY}px`;
             this.joystick.container.style.display = 'block';
@@ -93,20 +82,19 @@ export class GameUI {
             let dirY = e.clientY - this.joystick.startY;
             let distance = Math.sqrt(dirX * dirX + dirY * dirY);
 
-            // 限制手柄内芯最大滑动半径
             if (distance > this.joystick.maxRadius) {
                 dirX = (dirX / distance) * this.joystick.maxRadius;
                 dirY = (dirY / distance) * this.joystick.maxRadius;
             }
 
             this.joystick.stick.style.transform = `translate(${dirX}px, ${dirY}px)`;
-
-            // 物理传导向量
+            
+            // 导出归一化物理控制向量
             this.moveVector.x = dirX / this.joystick.maxRadius;
             this.moveVector.y = dirY / this.joystick.maxRadius;
         });
 
-        const endTouch = (e) => {
+        const resetJoystick = (e) => {
             if (!this.joystick.active || e.pointerId !== this.joystick.pointerId) return;
             this.joystick.active = false;
             this.joystick.container.style.display = 'none';
@@ -114,96 +102,76 @@ export class GameUI {
             this.moveVector.y = 0;
         };
 
-        window.addEventListener('pointerup', endTouch);
-        window.addEventListener('pointercancel', endTouch);
+        window.addEventListener('pointerup', resetJoystick);
+        window.addEventListener('pointercancel', resetJoystick);
     }
 
-    /**
-     * 📺 广告双倍升级机制与武器购买控制
-     */
-    bindMenuAndWeapons() {
-        // 1. 广告强化开局机制 (第一次16，第二次32，准备上市接入)
+    bindEvents() {
+        // 📺 广告控制线：看广告第一次到16，第二次到32，未来对接平台广告API
         this.domBtnAd.addEventListener('click', () => {
             this.adClicks++;
             if (this.adClicks === 1) {
                 this.playerNumber = 16;
                 this.domAdStatusText.innerText = "NEXT: N32";
-                this.domAdStatusText.style.background = "#00FFCC";
-                this.domAdStatusText.style.color = "#000";
                 this.domNumber.innerText = this.playerNumber;
-                this.showAlert("AD WATCHED! INITIAL NUMBER UPGRADED TO 16!");
+                this.showAlert("AD VALUE LOCKED! STARTING SIZE: 16");
             } else if (this.adClicks === 2) {
                 this.playerNumber = 32;
-                this.domAdStatusText.innerText = "MAX POWER";
+                this.domAdStatusText.innerText = "MAX SIZE";
                 this.domBtnAd.disabled = true;
                 this.domBtnAd.style.opacity = "0.5";
                 this.domNumber.innerText = this.playerNumber;
-                this.showAlert("AD WATCHED! INITIAL NUMBER CHARGED TO 32!");
+                this.showAlert("AD VALUE LOCKED! STARTING SIZE: 32");
             }
-            // 联动更新3D世界中Player球的数值和尺寸
-            if (window.myMainScene) {
-                window.myMainScene.syncPlayerSizeByNumber();
-            }
+            if (window.myMainScene) window.myMainScene.syncPlayerRadius();
         });
 
-        // 2. 点击【START GAME】
+        // 点击开始游戏
         this.domBtnStart.addEventListener('click', () => {
-            this.domStartMenu.style.display = 'none'; // 玻璃面板隐形
-            if (window.myMainScene) {
-                window.myMainScene.spawnPlayer(); // 白金战球重九天落入碗底
-            }
+            this.domStartMenu.style.display = 'none';
+            if (window.myMainScene) window.myMainScene.activateArena();
         });
 
-        // 3. 武器价格硬核格杀 (50 / 100 / 200)
-        const weaponIds = ['wpn-shield', 'wpn-lightning', 'wpn-vacuum'];
-        weaponIds.forEach(id => {
+        // ⚔️ 武器库扣款格杀逻辑：50, 100, 200 分别锁定
+        const weapons = ['wpn-shield', 'wpn-lightning', 'wpn-vacuum'];
+        weapons.forEach(id => {
             const el = document.getElementById(id);
             el.addEventListener('click', () => {
-                if (el.classList.contains('unlocked')) {
-                    this.showAlert(`WEAPON ALREADY ACTIVE!`);
-                    return;
-                }
-                const price = parseInt(el.getAttribute('data-price'));
+                if (el.classList.contains('unlocked')) return;
+                const cost = parseInt(el.getAttribute('data-price'));
                 
-                // 金币检验安全审查
-                if (this.coins >= price) {
-                    this.coins -= price;
+                // 金币安全核算
+                if (this.coins >= cost) {
+                    this.coins -= cost;
                     this.domCoins.innerText = this.coins;
                     el.classList.remove('locked');
                     el.classList.add('unlocked');
-                    this.showAlert(`SUCCESSFULLY UNLOCKED ${id.replace('wpn-','').toUpperCase()}!`);
+                    this.showAlert(`UNLOCKED! WEAPON IS ACTIVE!`);
                 } else {
-                    this.showAlert(`GOLD INSUFFICIENT! NEED $${price} TO UNLOCK THIS WEAPON.`);
+                    this.showAlert(`LOCK ACTIVATED! NEED $${cost} COINS TO UNLOCK.`);
                 }
             });
         });
     }
 
-    /**
-     * 💰 吃金币结算入口 (一个金币5块钱)
-     */
     addCoin() {
-        this.coins += 5;
+        this.coins += 5; // 吃一个硬币得5块钱
         this.domCoins.innerText = this.coins;
     }
 
-    /**
-     * 🔢 2048 号码升级核心入口
-     */
-    upgradeNumber() {
-        this.playerNumber *= 2;
+    triggerMerge() {
+        this.playerNumber *= 2; // 2048升级倍增
         this.domNumber.innerText = this.playerNumber;
     }
 
-    showAlert(text) {
-        this.domAlertText.innerText = text;
+    showAlert(msg) {
+        this.domAlertText.innerText = msg;
         this.domAlertBox.classList.remove('hidden');
-        if (this.alertTimer) clearTimeout(this.alertTimer);
-        this.alertTimer = setTimeout(() => this.domAlertBox.classList.add('hidden'), 2500);
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.domAlertBox.classList.add('hidden'), 2000);
     }
 
     getInputVector() { return this.moveVector; }
 }
 
-// 挂载全局全局UI管理器
 window.myGameUI = new GameUI();
