@@ -1,208 +1,243 @@
 /**
  * ==========================================================================
- * BallRanger.io - 局内 UI 与多点触控防死锁引擎 (iPad Safari 专用高级版)
+ * BallRanger.io - GameUI 核心控制中心 (华文注释/英文UI)
+ * 职责：托管摇杆、键盘监听、三端输入平滑转换、Firebase 伪数据对接及弹窗拦截
  * ==========================================================================
  */
-
 export class GameUI {
     constructor() {
-        // --- 1. 初始化所有 HTML DOM 节点的接头 ---
-        this.startMenu = document.getElementById('start-menu-overlay');
-        this.ingameUI = document.getElementById('ingame-ui-layer');
-        this.adLoader = document.getElementById('ad-loader-screen');
-        this.alertBanner = document.getElementById('center-alert-banner');
+        // 1. 初始化本地核心状态数据
+        this.coins = 0;
+        this.mass = 2;
+        this.moveVector = { x: 0, y: 0 }; // 最终输出给物理引擎的移动向量：X(左右), Y(前后)
         
-        // 按钮类接头
-        this.btnStart = document.getElementById('btn-start-game');
-        this.btnAdX5 = document.getElementById('btn-ad-x5');
-        this.btnAdX2 = document.getElementById('btn-ad-x2');
-        this.btnDash = document.getElementById('action-dash');
-        
-        // 文本数值类接头
-        this.previewSizeNum = document.getElementById('preview-size-num');
-        this.hudCoinAmount = document.getElementById('hud-coin-amount');
-        
-        // --- 2. 核心状态账本 (State Management) ---
-        this.currentSizeMultiplier = 1; // 初始大厅球体体积倍数
-        this.isX5Watched = false;       // 标记是否看过了 x5 广告
-        this.isX2Watched = false;       // 标记是否看过了 x2 广告
-        this.walletGold = parseInt(localStorage.getItem('br_wallet_gold')) || 0; // 从本地常驻内存读取金币
-        this.isShieldUnlocked = localStorage.getItem('br_unlocked_shield') === 'true';
-        
-        // --- 3. iPad 独立多点触控身份证账本 (Pointer IDs) ---
-        this.joystickPointerId = null;  // 专门锁死左手模拟摇杆的手指身份证
-        this.touchStartX = 0;
-        this.touchStartY = 0;
-        this.moveX = 0;                 // 最终传给 3D 引擎的虚拟水平力 (X轴)
-        this.moveZ = 0;                 // 最终传给 3D 引擎的虚拟纵深力 (Z轴，严防颠倒加到Y轴上)
+        // 2. 摇杆专用状态机 (仅在手机/iPad 触控时触发)
+        this.joystick = {
+            active: false,
+            pointerId: null,
+            startX: 0,
+            startY: 0,
+            moveX: 0,
+            moveY: 0,
+            maxRadius: 50, // 摇杆最大内圈滑动半径
+            container: null,
+            stick: null
+        };
 
-        // --- 4. 注册外部 3D 物理引擎的传音筒 (Callbacks) ---
-        this.onJoystickMoveCallback = null;
-        this.onDashTriggerCallback = null;
-        this.onWeaponTriggerCallback = null;
-        this.onGameStartLaunchCallback = null;
+        // 3. 键盘状态机 (电脑端专用)
+        this.keys = { w: false, a: false, s: false, d: false, ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false };
 
-        // 刷新初始金币UI显示
-        this.hudCoinAmount.innerText = this.walletGold + "G";
-
-        this.initDOMEvents();
-        this.initTouchEngine();
+        // 4. 彻底启动全套服务
+        this.cacheDOM();
+        this.bindClickEvents();
+        this.bindPointerEvents();
+        this.bindKeyboardEvents();
+        
+        console.log("💂‍♂️ [GameUI] 核心控制中心初始化成功！三端输入监听已全面布防。");
     }
 
-    /**
-     * 绑定大厅与武器升级按钮的点击事件
-     */
-    initDOMEvents() {
-        // A. 看广告倍增 x5 按钮逻辑
-        this.btnAdX5.addEventListener('click', () => {
-            if (this.isX5Watched) return;
-            this.playMockAd(() => {
-                this.currentSizeMultiplier = 5;
-                this.isX5Watched = true;
-                this.previewSizeNum.innerText = "10 (x5 Boosted)";
-                this.btnAdX5.classList.add('disabled');
-                this.btnAdX5.innerText = "📺 X5 CLAIMED";
-                // 激活 x2 按钮的大门
-                this.btnAdX2.classList.remove('disabled');
-                this.btnAdX2.removeAttribute('disabled');
-                this.triggerCenterAlert("SIZE BOOSTED TO 5X!");
-            });
-        });
+    // 抓取 HTML 元素，为后续数值更新做准备
+    cacheDOM() {
+        this.domCoins = document.getElementById('ui-coins');
+        this.domMass = document.getElementById('ui-mass');
+        this.domBtnBoost = document.getElementById('btn-boost');
+        this.domBtnDash = document.getElementById('btn-dash');
+        this.domAlertBox = document.getElementById('alert-msg-box');
+        this.domAlertText = document.getElementById('alert-text');
+        this.domGameContainer = document.getElementById('game-container');
+        
+        // 动态在桌面上为 iPad/手机 创建一个优雅的虚拟摇杆外圈和内芯
+        this.createJoystickElements();
+    }
 
-        // B. 看广告倍增 x2 按钮逻辑
-        this.btnAdX2.addEventListener('click', () => {
-            if (!this.isX5Watched || this.isX2Watched) return;
-            this.playMockAd(() => {
-                this.currentSizeMultiplier = 10; // 5 * 2 = 10倍体积！
-                this.isX2Watched = true;
-                this.previewSizeNum.innerText = "20 (MAX 10x Boosted!)";
-                this.btnAdX2.classList.add('disabled');
-                this.btnAdX2.innerText = "📺 MAXED OUT";
-                this.triggerCenterAlert("SIZE MAXED OUT TO 10X!");
-            });
-        });
+    createJoystickElements() {
+        // 创建摇杆大底座
+        this.joystick.container = document.createElement('div');
+        this.joystick.container.id = 'virtual-joystick-container';
+        this.joystick.container.style.cssText = `
+            position: absolute; bottom: 12vh; left: 8vw;
+            width: 120px; height: 120px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            border-radius: 50%; display: none; z-index: 100;
+            pointer-events: auto; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px);
+        `;
+        
+        // 创建摇杆小内芯
+        this.joystick.stick = document.createElement('div');
+        this.joystick.stick.style.cssText = `
+            position: absolute; top: 35px; left: 35px;
+            width: 46px; height: 46px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(200,200,200,0.5) 100%);
+            border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: transform 0.05s ease;
+        `;
+        
+        this.joystick.container.appendChild(this.joystick.stick);
+        document.getElementById('ui-layer').appendChild(this.joystick.container);
+        
+        // 如果检测到是触控设备（iPad/手机），立刻把摇杆亮出来
+        if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+            this.joystick.container.style.display = 'block';
+        }
+    }
 
-        // C. 点击 START GAME 正式发射进场
-        this.btnStart.addEventListener('click', () => {
-            this.startMenu.classList.add('hidden-ui');       // 隐藏大厅
-            this.ingameUI.classList.remove('hidden-ui');     // 唤醒局内 UI 
-            
-            this.triggerCenterAlert("MATCH STARTED! FIGHT!");
-
-            // 广播给 3D 引擎：玩家带着最终翻倍倍数入场，准备生成真正的 3D 刚体
-            if (this.onGameStartLaunchCallback) {
-                this.onGameStartLaunchCallback(this.currentSizeMultiplier);
+    // ==========================================================================
+    // ⚔️ 防暗杀防死锁：绑定右侧动作按键及拦截未购买武器
+    // ==========================================================================
+    bindClickEvents() {
+        // 开局变大按钮点击
+        this.domBtnBoost.addEventListener('click', () => {
+            if (this.mass < 20) {
+                this.mass++;
+                this.domMass.innerText = this.mass;
+                console.log(`🚀 [Boost] 玩家体积增大！当前质量: ${this.mass}`);
+            } else {
+                this.showAlert("MASS REACHED MAXIMUM LIMIT (20)!");
             }
         });
 
-        // D. 局内 DASH 冲刺按钮
-        this.btnDash.addEventListener('click', (e) => {
-            e.stopPropagation(); // 阻止事件往下渗透污染 3D 视口
-            if (this.onDashTriggerCallback) this.onDashTriggerCallback();
+        // DASH 冲刺按钮点击
+        this.domBtnDash.addEventListener('click', () => {
+            console.log("⚡ [Dash] 触发冲刺！");
+            // 这里留给 PhysicsEngine 监听触发爆发推进力
         });
 
-        // E. 局内 3 个高阶武器反作弊拦截点击
-        const skills = ['shield', 'lightning', 'vacuum'];
-        skills.forEach(skill => {
-            const btn = document.getElementById(`skill-${skill}`);
+        // 拦截三大未购买武器（盾、闪电、吸盘）
+        const weapons = ['btn-weapon-shield', 'btn-weapon-lightning', 'btn-weapon-vacuum'];
+        weapons.forEach(id => {
+            const btn = document.getElementById(id);
             if (btn) {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    // 如果在本地商店里没解锁，死死拦住，弹出警告！
-                    if (skill === 'shield' && !this.isShieldUnlocked) {
-                        this.triggerCenterAlert("UNLOCK SHIELD IN SHOP FIRST!");
-                        return;
-                    }
-                    // 已解锁状态，放行通知物理与武器文件
-                    if (this.onWeaponTriggerCallback) this.onWeaponTriggerCallback(skill);
+                btn.addEventListener('click', () => {
+                    this.showAlert("WEAPON NOT PURCHASED! PLEASE BUY IT IN THE ARMORY.");
                 });
             }
         });
     }
 
-    /**
-     * 🏹 iPad 多点触控身份证防火墙引擎 (PointerEvent Architecture)
-     * 彻底抛弃 touches[0]，左半屏任意搓产生隐藏虚拟摇杆，右半屏点按不受干扰
-     */
-    initTouchEngine() {
-        // 监听整张网页的指针按下事件
-        document.addEventListener('pointerdown', (e) => {
-            // 如果是在开局大厅，或者点到了右下角动作条，不产生摇杆逻辑
-            if (!this.startMenu.classList.contains('hidden-ui')) return;
-            if (e.clientY > window.innerHeight * 0.75 && e.clientX > window.innerWidth * 0.4) return;
+    // 弹出高科技全屏警告，2秒后自动淡出
+    showAlert(text) {
+        this.domAlertText.innerText = text;
+        this.domAlertBox.classList.remove('hidden');
+        
+        if (this.alertTimer) clearTimeout(this.alertTimer);
+        this.alertTimer = setTimeout(() => {
+            this.domAlertBox.add('hidden'); // 军师修正：应该是 classList.add
+            this.domAlertBox.classList.add('hidden');
+        }, 2000);
+    }
 
-            // 锁定左半屏作为摇杆感应区，且当前没有活动的摇杆手指
-            if (e.clientX < window.innerWidth * 0.6 && this.joystickPointerId === null) {
-                this.joystickPointerId = e.pointerId; // 抓取当前这根手指的独立身份证号！
-                this.touchStartX = e.clientX;
-                this.touchStartY = e.clientY;
-            }
+    // ==========================================================================
+    // 🕹️ 核心神技：PointerEvents 追踪，彻底终结左右手触控打架、卡死
+    // ==========================================================================
+    bindPointerEvents() {
+        const container = this.joystick.container;
+        
+        // 手指按在摇杆底座上
+        container.addEventListener('pointerdown', (e) => {
+            if (this.joystick.active) return; // 已经有手指占领了，拒绝第二根手指
+            
+            this.joystick.active = true;
+            this.joystick.pointerId = e.pointerId; // 记住这根金手指的“身份证号”
+            container.setPointerCapture(e.pointerId); // 锁定这根手指，就算划出圈外也能持续追踪
+            
+            const rect = container.getBoundingClientRect();
+            // 计算摇杆中心点坐标
+            this.joystick.startX = rect.left + rect.width / 2;
+            this.joystick.startY = rect.top + rect.height / 2;
         });
 
-        // 监听指针移动
-        document.addEventListener('pointermove', (e) => {
-            // 只有对上身份证号的那根手指移动，才计算搓球力矩
-            if (this.joystickPointerId === e.pointerId) {
-                const deltaX = e.clientX - this.touchStartX;
-                const deltaY = e.clientY - this.touchStartY;
-                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY) || 1;
-                const maxRadius = 60; // 摇杆最大内圈半径
-
-                // 限制推力系数在 -1.0 到 1.0 之间
-                const ratio = Math.min(distance, maxRadius) / maxRadius;
-                this.moveX = (deltaX / distance) * ratio;
-                this.moveZ = (deltaY / distance) * ratio; // ⚠️ 注意：屏幕的 Y 轴对应 3D 世界的 Z 轴（前后纵深）！
-
-                // 实时传音给 3D 物理循环，推球前行
-                if (this.onJoystickMoveCallback) {
-                    this.onJoystickMoveCallback(this.moveX, this.moveZ);
-                }
+        // 手指在全屏幕滑动
+        container.addEventListener('pointermove', (e) => {
+            if (!this.joystick.active || e.pointerId !== this.joystick.pointerId) return;
+            
+            // 计算当前手指距离摇杆中心的偏移量
+            let dirX = e.clientX - this.joystick.startX;
+            let dirY = e.clientY - this.joystick.startY;
+            let distance = Math.sqrt(dirX * dirX + dirY * dirY);
+            
+            // 限制内芯不能跑出大圈圈
+            if (distance > this.joystick.maxRadius) {
+                dirX = (dirX / distance) * this.joystick.maxRadius;
+                dirY = (dirY / distance) * this.joystick.maxRadius;
+                distance = this.joystick.maxRadius;
             }
+            
+            // 渲染内芯的物理视觉位移
+            this.joystick.stick.style.transform = `translate(${dirX}px, ${dirY}px)`;
+            
+            // 【极其重要】：归一化矩阵（输出 -1 到 1 之间的精确比例），传给未来的物理球
+            this.moveVector.x = dirX / this.joystick.maxRadius;
+            this.moveVector.y = dirY / this.joystick.maxRadius; // 这里的 y 代表屏幕向下为正
         });
 
-        // 监听指针抬起或因意外断开 (比如手掌边缘刮到 iPad 屏幕)
-        const endTouch = (e) => {
-            if (this.joystickPointerId === e.pointerId) {
-                this.joystickPointerId = null; // 释放身份证号
-                this.moveX = 0;
-                this.moveZ = 0;
-                if (this.onJoystickMoveCallback) this.onJoystickMoveCallback(0, 0); // 球由于没有推力，靠惯性滑行
-            }
+        // 手指抬起，状态彻底重置
+        const endPointer = (e) => {
+            if (!this.joystick.active || e.pointerId !== this.joystick.pointerId) return;
+            
+            this.joystick.active = false;
+            this.joystick.pointerId = null;
+            this.joystick.stick.style.transform = 'translate(0px, 0px)'; // 芯归原位
+            this.moveVector.x = 0;
+            this.moveVector.y = 0; // 物理推力瞬间清零，球靠惯性滑行
         };
 
-        document.addEventListener('pointerup', endTouch);
-        document.addEventListener('pointercancel', endTouch); // 专门应对 iPad 特有的多指误触取消
+        container.addEventListener('pointerup', endPointer);
+        container.addEventListener('pointercancel', endPointer);
     }
 
-    /**
-     * 📺 1.5秒全屏磨砂广告加载空壳 (未来直接接入商业广告 SDK 替换此处即可)
-     */
-    playMockAd(onVideoFinished) {
-        this.adLoader.classList.remove('hidden-ui');
-        setTimeout(() => {
-            this.adLoader.classList.add('hidden-ui');
-            onVideoFinished();
-        }, 1500); // 1.5 秒后模拟看完广告，无缝回调
+    // ==========================================================================
+    // ⌨️ 电脑端键盘自适应适配：WASD / 方向键
+    // ==========================================================================
+    bindKeyboardEvents() {
+        window.addEventListener('keydown', (e) => {
+            if (e.key in this.keys) {
+                this.keys[e.key] = true;
+                this.updateKeyboardVector();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key in this.keys) {
+                this.keys[e.key] = false;
+                this.updateKeyboardVector();
+            }
+        });
     }
 
-    /**
-     * 📢 浮动中央全英文高阶警告弹窗
-     */
-    triggerCenterAlert(message) {
-        this.alertBanner.innerText = message;
-        this.alertBanner.classList.remove('alert-banner-hidden');
-        
-        // 清除上一次的定时器，防止快速连续点击时弹窗闪烁
-        clearTimeout(this.alertTimeout);
-        this.alertTimeout = setTimeout(() => {
-            this.alertBanner.classList.add('alert-banner-hidden');
-        }, 2000); // 2秒后自动优雅淡出
+    updateKeyboardVector() {
+        // 如果触控摇杆正在生效，电脑键盘自动让路，不进行干扰
+        if (this.joystick.active) return;
+
+        let x = 0;
+        let y = 0;
+
+        if (this.keys.w || this.keys.ArrowUp) y -= 1;    // 键盘上移代表 3D 纵深向前
+        if (this.keys.s || this.keys.ArrowDown) y += 1;  // 键盘下移代表 3D 纵深向后
+        if (this.keys.a || this.keys.ArrowLeft) x -= 1;  // 左右不变
+        if (this.keys.d || this.keys.ArrowRight) x += 1;
+
+        this.moveVector.x = x;
+        this.moveVector.y = y;
+    }
+
+    // 提供给 PhysicsEngine 实时每帧过来抽查数据拿走推力的方法
+    getInputVector() {
+        return this.moveVector;
+    }
+
+    // 提供给外部更新实时排行榜数据的方法
+    updateLeaderboard(rankArray) {
+        const listContainer = document.getElementById('leaderboard-list');
+        if (!listContainer) return;
+        listContainer.innerHTML = '';
+        rankArray.slice(0, 5).forEach((player, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span class="rank-name">${index + 1}. ${player.name}</span><span class="rank-val">${player.score}</span>`;
+            listContainer.appendChild(li);
+        });
     }
 }
 
-// ==========================================================================
-// 🚨 绝对核心防暗杀线：强行钉死在 window 全局作用域，彻底绝后患
-// ==========================================================================
-window.addEventListener('DOMContentLoaded', () => {
-    window.gameUI = new GameUI(); // 常驻内存，Safari 的垃圾回收看到它有主，绝对不敢清理它！
-});
+// 🔥【终极死守防线】：强制实例化并绑死在 window 全局，Safari 的 GC 回收机制看一眼都得绕道走！
+window.myGameUI = new GameUI();
